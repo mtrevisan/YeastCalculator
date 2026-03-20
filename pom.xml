@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+			xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>io.github.mtrevisan</groupId>
+	<artifactId>YeastCalculator</artifactId>
+	<version>1.0.0-SNAPSHOT</version>
+
+	<packaging>jar</packaging>
+
+	<name>YeastCalculator</name>
+	<description>Application for the linting of hunspell files</description>
+	<url>https://github.com/mtrevisan/YeastCalculator</url>
+
+	<developers>
+		<developer>
+			<name>Mauro Trevisan</name>
+			<url>https://github.com/mtrevisan/</url>
+			<roles>
+				<role>Developer</role>
+			</roles>
+		</developer>
+	</developers>
+
+	<scm>
+		<connection>scm:git:git@github.com:mtrevisan/YeastCalculator.git</connection>
+		<developerConnection>scm:git:git@github.com:mtrevisan/YeastCalculator.git</developerConnection>
+		<url>https://github.com/mtrevisan/YeastCalculator</url>
+	</scm>
+
+	<issueManagement>
+		<url>https://github.com/mtrevisan/YeastCalculator/issues</url>
+		<system>GitHub Issues</system>
+	</issueManagement>
+
+	<properties>
+		<main.class>io.github.mtrevisan.YeastCalculator.MainFrame</main.class>
+		<app.name>YeastCalculator</app.name>
+
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+		<java.version>21</java.version>
+		<maven.compiler.source>21</maven.compiler.source>
+		<maven.compiler.target>21</maven.compiler.target>
+
+		<javadoc.html.version>-html5</javadoc.html.version>
+
+		<maven.build.timestamp.format>yyyy-MM-dd</maven.build.timestamp.format>
+		<build.timestamp>${maven.build.timestamp}</build.timestamp>
+
+		<!-- This property is used to specify the modules included in the (custom) JVM image. -->
+		<jvm.modules>java.desktop,java.naming,jdk.localedata,jdk.unsupported</jvm.modules>
+		<jvm.locales>en</jvm.locales>
+		<jvm.temporaryFolder>out</jvm.temporaryFolder>
+		<jvm.outputFolder>jvm-image</jvm.outputFolder>
+		<app.vendor>Mauro Trevisan</app.vendor>
+		<app.menu>Mauro Trevisan's Tools</app.menu>
+		<app.copyright>(c) 2026 Mauro Trevisan</app.copyright>
+
+		<!-- Profiles & Build -->
+		<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-deploy-plugin -->
+		<maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
+		<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-source-plugin -->
+		<maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+		<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-javadoc-plugin -->
+		<maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+		<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-compiler-plugin -->
+		<maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+		<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-shade-plugin -->
+		<maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
+		<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-assembly-plugin -->
+		<maven-assembly-plugin.version>3.8.0</maven-assembly-plugin.version>
+		<!-- https://mvnrepository.com/artifact/org.codehaus.mojo/exec-maven-plugin -->
+		<exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
+		<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-surefire-plugin -->
+		<maven-surefire-plugin.version>3.5.5</maven-surefire-plugin.version>
+		<!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-install-plugin -->
+		<maven-install-plugin.version>3.1.4</maven-install-plugin.version>
+
+		<!-- Apache -->
+		<!-- Source: https://mvnrepository.com/artifact/org.apache.commons/commons-math3 -->
+		<apache.commons-math3.version>3.6.1</apache.commons-math3.version>
+
+		<!-- Logging -->
+		<!-- https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
+		<logback.logback-classic.version>1.5.32</logback.logback-classic.version>
+
+		<!-- JUnit -->
+		<!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-engine -->
+		<junit.junit-jupiter-engine.version>6.0.3</junit.junit-jupiter-engine.version>
+	</properties>
+
+	<build>
+		<plugins>
+			<!-- Compiler -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>${maven-compiler-plugin.version}</version>
+				<configuration>
+					<source>${maven.compiler.source}</source>
+					<target>${maven.compiler.target}</target>
+					<encoding>${project.build.sourceEncoding}</encoding>
+					<showDeprecation>true</showDeprecation>
+				</configuration>
+			</plugin>
+
+			<!-- Shade -->
+			<!-- NOTE: shade 3.2.4 does not support java 17 yet! -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<version>${maven-shade-plugin.version}</version>
+				<executions>
+					<execution>
+						<!-- Run shade goal on the package phase -->
+						<phase>package</phase>
+						<goals>
+							<goal>shade</goal>
+						</goals>
+						<configuration>
+							<minimizeJar>true</minimizeJar>
+							<shadedArtifactAttached>true</shadedArtifactAttached>
+							<shadedClassifierName>shaded</shadedClassifierName>
+							<outputDirectory>${project.build.directory}/${jvm.temporaryFolder}</outputDirectory>
+							<filters>
+								<!-- FIXME: strengthen the inclusions -->
+								<!-- ClassNotFoundException: ch.qos.logback.classic.boolex.OnMarkerEvaluator-->
+								<filter>
+									<artifact>ch.qos.logback:logback-classic</artifact>
+									<includes>
+										<include>**</include>
+									</includes>
+								</filter>
+								<filter>
+									<artifact>*:*</artifact>
+									<excludes>
+										<exclude>LICENSE.txt</exclude>
+										<exclude>META-INF/LICENSE</exclude>
+										<exclude>META-INF/LICENSE.txt</exclude>
+										<exclude>META-INF/NOTICE</exclude>
+										<exclude>META-INF/NOTICE.txt</exclude>
+									</excludes>
+								</filter>
+							</filters>
+							<transformers>
+								<transformer
+										implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+									<mainClass>${main.class}</mainClass>
+									<manifestEntries>
+										<X-Compile-Source-JDK>${maven.compiler.source}</X-Compile-Source-JDK>
+										<X-Compile-Target-JDK>${maven.compiler.target}</X-Compile-Target-JDK>
+										<Built-By>${app.vendor}</Built-By>
+										<Build-Jdk>${java.version} (${java.vendor} ${java.vm.version})</Build-Jdk>
+										<Build-OS>${os.name} ${os.arch} ${os.version}</Build-OS>
+									</manifestEntries>
+								</transformer>
+							</transformers>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<!-- Assembly / Make fat jar -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<version>${maven-assembly-plugin.version}</version>
+				<executions>
+					<execution>
+						<id>make-assembly</id>
+						<phase>prepare-package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<descriptorRefs>
+						<descriptorRef>jar-with-dependencies</descriptorRef>
+					</descriptorRefs>
+					<archive>
+						<manifestEntries>
+							<Built-By>${app.vendor}</Built-By>
+						</manifestEntries>
+						<manifest>
+							<mainClass>${main.class}</mainClass>
+						</manifest>
+					</archive>
+					<outputDirectory>${project.build.directory}/${jvm.temporaryFolder}</outputDirectory>
+					<appendAssemblyId>true</appendAssemblyId>
+				</configuration>
+			</plugin>
+		</plugins>
+
+<!--		<resources>-->
+<!--			<resource>-->
+<!--				<directory>${project.basedir}/src/packaging</directory>-->
+<!--				<filtering>true</filtering>-->
+<!--				<targetPath>${project.build.directory}/packaging</targetPath>-->
+<!--			</resource>-->
+<!--			<resource>-->
+<!--				<directory>${project.basedir}/src/packaging-launcher</directory>-->
+<!--				<filtering>true</filtering>-->
+<!--				<targetPath>${project.build.directory}/packaging-launcher</targetPath>-->
+<!--			</resource>-->
+<!--			&lt;!&ndash; Add the default resource path back in - by overriding above it disables the default &ndash;&gt;-->
+<!--			<resource>-->
+<!--				<directory>${project.basedir}/src/main/resources</directory>-->
+<!--				<includes>-->
+<!--					<include>*.*</include>-->
+<!--				</includes>-->
+<!--				<filtering>true</filtering>-->
+<!--			</resource>-->
+<!--		</resources>-->
+	</build>
+
+	<dependencies>
+		<!-- Apache -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-math3</artifactId>
+			<version>${apache.commons-math3.version}</version>
+		</dependency>
+
+
+		<!-- Logging -->
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-classic</artifactId>
+			<version>${logback.logback-classic.version}</version>
+		</dependency>
+
+		<!-- JUnit -->
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<version>${junit.junit-jupiter-engine.version}</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<licenses>
+		<license>
+			<name>MIT License</name>
+			<url>https://opensource.org/licenses/MIT</url>
+			<distribution>manual</distribution>
+		</license>
+	</licenses>
+</project>
