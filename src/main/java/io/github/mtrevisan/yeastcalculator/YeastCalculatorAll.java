@@ -63,11 +63,11 @@ import java.util.Locale;
  *
  * <h2>Literature</h2>
  * <ul>
- *   <li>Baranyi, J., & Roberts, T. A. (1994). A dynamic approach to predicting bacterial growth in food. International Journal of Food Microbiology, 23(3–4), 277–294.</li>
+ *   <li>Baranyi, J., & Roberts, T. A. (1994). A dynamic approach to predicting bacterial growth in food. International Journal of Food Microbiology, 23 (3–4), 277–294.</li>
  *   <li>Rosso L. et al. (1995) — J Theor Biol 175:159-171</li>
  *   <li>Ross T. (1993) — J Appl Bacteriol 74:608-611</li>
  *   <li>Hamad S. et al. (2012) — Food Microbiol 32:228-236</li>
- *   <li>Nagodawithana T.W. et al. (1986) — Can J Microbiol 32:467-472</li>
+ *   <li>Nagodawithana T. W. et al. (1986) — Can J Microbiol 32:467-472</li>
  *   <li>Gervais P., Beney L. (2001) — J Appl Microbiol 90:579-585</li>
  * </ul>
  *
@@ -121,7 +121,7 @@ public class YeastCalculatorAll{
 	 * <pre>
 	 *   Q0_effective = Q0_dry × exp(MU_MAX_REF × rehydrationDurationHours)
 	 * </pre>
-	 * Use 0 for instant dry yeast added directly to flour, or for fresh compressed
+	 * Use 0 for instant dry yeast added directly to flour or for fresh compressed
 	 * yeast that needs no pre-activation.
 	 */
 	private final double rehydrationDuration;
@@ -129,7 +129,7 @@ public class YeastCalculatorAll{
 	/**
 	 * Effective initial physiological state at the start of dough fermentation.
 	 * Accounts for any pre-activation in water: Q0_eff = Q0_dry × exp(μ_max × t_rehydration).
-	 * When rehydrationDurationHours = 0 this equals the raw Q0 from moisture content.
+	 * When rehydrationDurationHours is equal to zero, this equals the raw Q0 from moisture content.
 	 */
 	private final double initialPhysiologicalState;
 
@@ -146,7 +146,7 @@ public class YeastCalculatorAll{
 	 * @param water	Water [baker's percentage].
 	 * @param salt	Salt [baker's percentage].
 	 * @param sugar	Recipe fermentable sugar [baker's percentage]
-	 * 	(endogenous flour sugars + added sugar, excluding malt).
+	 * 	(endogenous flour sugars plus added sugar, excluding malt).
 	 * @param stageTemperatures	Stage temperatures [°C].
 	 * @param stageDurations	Stage durations [h].
 	 * @param yeastMoisture	Moisture of the yeast [g_water / g_wet_yeast]:
@@ -346,7 +346,7 @@ public class YeastCalculatorAll{
 				* sugarAvailability;
 
 			//── ODE derivatives ───────────────────────────────────────────────
-			//dQ/dt uses MU_MAX_REF (not effectiveGrowthRate): Q evolves at maximum rate regardless of environment — it
+			//dQ/dt uses MU_MAX_REF (not effectiveGrowthRate): Q evolves at the maximum rate regardless of environment — it
 			// represents intracellular enzyme reserves that replenish at a fixed rate (Baranyi (1994), eq. 2)
 			derivatives[KineticParameters.IDX_PHYSIOLOGICAL_STATE] = KineticParameters.MU_MAX_REF * physiologicalState;
 
@@ -466,7 +466,7 @@ public class YeastCalculatorAll{
 	// (see constructor). For the total wait from the start of rehydration:
 	//   λ_total = rehydrationDurationHours + λ_dough
 	// Rationale: dQ/dt = MU_MAX_REF · Q (constant, environment-independent).
-	// Q exits the lag state — i.e. Q/(Q+1) → 1 — after time
+	// Q exits the lag state — i.e., Q/(Q+1) → 1 — after time
 	//   λ = ln(1 + 1/Q0) / MU_MAX_REF
 	// regardless of temperature or water activity, because those factors only
 	// affect the BIOMASS growth rate dN/dt, not the physiological recovery dQ/dt.
@@ -664,7 +664,7 @@ public class YeastCalculatorAll{
 				final double currentTime = stageStartTime + printPoint * printInterval;
 				final double nextTime = Math.min(currentTime + printInterval, stageStartTime + stageDuration);
 
-				//print state at currentTime before advancing
+				//print state at the currentTime before advancing
 				final double physiologicalState = state[KineticParameters.IDX_PHYSIOLOGICAL_STATE];
 				final double biomassDensity = state[KineticParameters.IDX_BIOMASS_DENSITY];
 				final double sugarConcentration = state[KineticParameters.IDX_SUGAR_CONCENTRATION];
@@ -697,7 +697,7 @@ public class YeastCalculatorAll{
 					waterActivity,
 					effectiveGrowthRate);
 
-				//advance integrator to next print point
+				//advance integrator to the next print point
 				final DormandPrince853Integrator integrator = new DormandPrince853Integrator(
 					//minimum adaptive step size [h] — prevents stalling
 					1e-6,

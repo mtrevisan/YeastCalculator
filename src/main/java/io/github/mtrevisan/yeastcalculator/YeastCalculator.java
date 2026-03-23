@@ -4,6 +4,7 @@ import io.github.mtrevisan.yeastcalculator.model.DoughComposition;
 import io.github.mtrevisan.yeastcalculator.model.FermentationSchedule;
 import io.github.mtrevisan.yeastcalculator.model.YeastProperties;
 import io.github.mtrevisan.yeastcalculator.optimization.YeastOptimizer;
+import io.github.mtrevisan.yeastcalculator.output.RehydrationAnalyzer;
 import io.github.mtrevisan.yeastcalculator.output.SensitivityAnalyzer;
 import io.github.mtrevisan.yeastcalculator.output.SimulationTracer;
 
@@ -56,11 +57,11 @@ import io.github.mtrevisan.yeastcalculator.output.SimulationTracer;
  *
  * <h2>Literature</h2>
  * <ul>
- *   <li>Baranyi, J., & Roberts, T. A. (1994). A dynamic approach to predicting bacterial growth in food. International Journal of Food Microbiology, 23(3–4), 277–294.</li>
+ *   <li>Baranyi, J., & Roberts, T. A. (1994). A dynamic approach to predicting bacterial growth in food. International Journal of Food Microbiology, 23 (3–4), 277–294.</li>
  *   <li>Rosso L. et al. (1995) — J Theor Biol 175:159-171</li>
  *   <li>Ross T. (1993) — J Appl Bacteriol 74:608-611</li>
  *   <li>Hamad S. et al. (2012) — Food Microbiol 32:228-236</li>
- *   <li>Nagodawithana T.W. et al. (1986) — Can J Microbiol 32:467-472</li>
+ *   <li>Nagodawithana T. W. et al. (1986) — Can J Microbiol 32:467-472</li>
  *   <li>Gervais P., Beney L. (2001) — J Appl Microbiol 90:579-585</li>
  * </ul>
  *
@@ -81,7 +82,7 @@ public class YeastCalculator{
 	 * @param water	Water [baker's percentage].
 	 * @param salt	Salt [baker's percentage].
 	 * @param sugar	Recipe fermentable sugar [baker's percentage]
-	 * 	(endogenous flour sugars + added sugar, excluding malt).
+	 * 	(endogenous flour sugars plus added sugar, excluding malt).
 	 * @param stageTemperatures	Stage temperatures [°C].
 	 * @param stageDurations	Stage durations [h].
 	 * @param yeastMoisture	Moisture of the yeast [g_water / g_wet_yeast]:
@@ -126,6 +127,10 @@ public class YeastCalculator{
 
 	SensitivityAnalyzer getSensitivityAnalyzer(){
 		return new SensitivityAnalyzer(yeastOptimizer);
+	}
+
+	RehydrationAnalyzer getRehydrationAnalyzer(){
+		return new RehydrationAnalyzer(dough, schedule, yeast.moisture);
 	}
 
 }

@@ -61,7 +61,7 @@ public class SimulationTracer{
 
 				printStateRow(currentTime, stage, state);
 
-				// Advance integrator to next print point
+				// Advance integrator to the next print point
 				final DormandPrince853Integrator integrator = new DormandPrince853Integrator(
 					//minimum adaptive step size [h] — prevents stalling
 					1e-6,

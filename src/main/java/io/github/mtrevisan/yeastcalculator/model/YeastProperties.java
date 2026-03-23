@@ -20,14 +20,14 @@ public class YeastProperties{
 	 * <pre>
 	 *   Q0_effective = Q0_dry × exp(MU_MAX_REF × rehydrationDurationHours)
 	 * </pre>
-	 * Use 0 for instant dry yeast added directly to flour, or for fresh compressed
+	 * Use 0 for instant dry yeast added directly to flour or for fresh compressed
 	 * yeast that needs no pre-activation.
 	 */
 	public final double rehydrationDuration;
 	/**
 	 * Effective initial physiological state at the start of dough fermentation.
 	 * Accounts for any pre-activation in water: Q0_eff = Q0_dry × exp(μ_max × t_rehydration).
-	 * When rehydrationDurationHours = 0 this equals the raw Q0 from moisture content.
+	 * When rehydrationDurationHours is equal to 0, this equals the raw Q0 from moisture content.
 	 */
 	public final double initialPhysiologicalState;
 

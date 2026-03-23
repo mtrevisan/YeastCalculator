@@ -5,12 +5,12 @@ import io.github.mtrevisan.yeastcalculator.model.DoughComposition;
 
 /**
  * Water activity — Ross multi-solute logarithmic model (Ross (1993))
- *
+ * <p>
  * Uses freeWaterFraction (= total water − GAB bound water) as the solvent mass, because water tightly bound to flour
  * is not osmotically active.
  * At 65% hydration this lowers aw by ≈ 0.015–0.020 relative to using the total water fraction — a correction larger
  * than any other second-order effect in this model.
- *
+ * <p>
  * Solutes: NaCl and sucrose (dominant osmolytes in bread dough).
  * sugarConcentration is the current (dynamic) sugar fraction, because fermentation consumes sugar and changes aw over
  * 	time.
@@ -37,7 +37,7 @@ public class WaterActivityModel{
 
 	/**
 	 * Water activity inhibition factor — γ_aw ∈ [0, 1]
-	 *
+	 * <p>
 	 * Linear ramp between AW_MIN and AW_OPT_DOUGH (Hamad (2012) dough system).
 	 * Using the broth AW_OPT = 0.995 would penalize typical dough (aw ≈ 0.97) by ~36%, producing unrealistically slow
 	 * growth.

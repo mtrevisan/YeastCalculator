@@ -19,19 +19,19 @@ public class RehydrationAnalyzer{
 
 
 	public RehydrationAnalyzer(final DoughComposition dough, final FermentationSchedule schedule,
-		final double yeastMoisture){
+			final double yeastMoisture){
 		this.dough = dough;
 		this.schedule = schedule;
 		this.yeastMoisture = yeastMoisture;
 	}
 
 	/**
-	 * Print table: rehydration time vs Q0_eff, lag, and optimal yeast.
+	 * Print table: rehydration time vs. Q0_eff, lag, and optimal yeast.
 	 */
 	public void printRehydrationEffect(){
 		System.out.printf(Locale.US,
-			"%-13s %-7s %-9s %-1s%n",
-			"t_rehyd[min]", "Q0_eff", "lag[min]", "yeast(WB)");
+			"%-13s %-9s %-1s%n",
+			"t_rehyd[min]", "lag[min]", "yeast(WB)");
 
 		for(final double tMin : new double[]{0., 5., 10., 15., 20., 30., 45., 60.}){
 			final YeastProperties yeastRehydrated = new YeastProperties(yeastMoisture, tMin / 60.);
@@ -49,9 +49,8 @@ public class RehydrationAnalyzer{
 				System.setErr(originalErr);
 
 			System.out.printf(Locale.US,
-				"%-13.0f %-7.2f %-9d %-1.2f%%%s%n",
+				"%-13.0f %-9d %-1.2f%%%s%n",
 				tMin,
-				yeastRehydrated.initialPhysiologicalState,
 				(int)Math.ceil(optimizer.estimatedLagTime() * 60),
 				optimizer.toBakersWetPercent(optimalYeast),
 				(hasWarning? " ⚠️": ""));

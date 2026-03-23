@@ -3,7 +3,7 @@ package io.github.mtrevisan.yeastcalculator.kinetics;
 
 /**
  * Cardinal temperature model — Rosso et al. (1995).
- *
+ * <p>
  * Returns γ_T ∈ [0, 1]. γ_T = 1 at T_OPT.
  */
 public class CardinalTemperatureModel{

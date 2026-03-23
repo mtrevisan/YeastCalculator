@@ -1,11 +1,10 @@
 package io.github.mtrevisan.yeastcalculator;
 
 import io.github.mtrevisan.yeastcalculator.model.FlourMoistureModel;
+import io.github.mtrevisan.yeastcalculator.output.RehydrationAnalyzer;
 import io.github.mtrevisan.yeastcalculator.output.SensitivityAnalyzer;
 import io.github.mtrevisan.yeastcalculator.output.SimulationTracer;
 
-import java.io.OutputStream;
-import java.io.PrintStream;
 import java.util.Locale;
 
 
@@ -29,7 +28,7 @@ public class Main{
 		final double water = 0.65;
 		final double salt = 0.012;
 		final double sugar = 0.02;
-		//extra ingredients, such as oil, malt, etc
+		//extra ingredients, such as oil, malt, etc.
 		final double extra = 0.;
 
 		//── Fermentation schedule ──────────────────────────────────────────
@@ -72,28 +71,8 @@ public class Main{
 
 		//── Effect of rehydration time on lag (same yeast, same schedule) ─────────
 		System.out.printf("%n=== EFFECT OF REHYDRATION TIME ===%n");
-		System.out.printf(Locale.US,
-			"%-13s %-9s %-1s%n",
-			"t_rehyd[min]", "lag[min]", "yeast(WB)");
-		for(final double tMin : new double[]{0., 5., 10., 15., 20., 30., 45., 60.}){
-			final YeastCalculator mr = new YeastCalculator(
-				water, salt, sugar, extra,
-				temperatures, durations,
-				flourFreeWater, yeastMoisture,
-				tMin / 60.);
-			final boolean hasWarning = mr.hasWarning();
-			final PrintStream originalErr = System.err;
-			if(hasWarning)
-				System.setErr(new PrintStream(OutputStream.nullOutputStream()));
-			final double n0r = mr.findOptimal(false);
-			if(hasWarning)
-				System.setErr(originalErr);
-			System.out.printf(Locale.US,
-				"%-13.0f %-9d %-1.2f%%%s%n",
-				tMin,
-				mr.estimatedLagTime(),
-				mr.yeastWB(n0r), (hasWarning? " ⚠️": ""));
-		}
+		final RehydrationAnalyzer rehydrationAnalyzer = model.getRehydrationAnalyzer();
+		rehydrationAnalyzer.printRehydrationEffect();
 	}
 
 }

@@ -6,9 +6,9 @@ import io.github.mtrevisan.yeastcalculator.kinetics.KineticParameters;
 /**
  * Baranyi physiological state (Q) — a measure of yeast metabolic readiness.
  * <p>
- * Q represents the intracellular enzyme reserve pool. During lag phase, Q grows
- * at a constant rate (dQ/dt = μ_max_ref · Q) independent of environment. Once
- * Q reaches ~1, lag phase ends and exponential growth begins.
+ * Q represents the intracellular enzyme reserve pool. During the lag phase, Q grows
+ * at a constant rate (dQ/dt = μ_max_ref · Q) independent of the environment. Once
+ * Q reaches ~1, the lag phase ends and exponential growth begins.
  * <p>
  * The lag adjustment factor is: α_lag = Q / (Q + 1)
  * - Q → 0: α_lag → 0 (complete lag, no growth)
@@ -53,7 +53,7 @@ public class PhysiologicalState{
 	/**
 	 * Compute effective Q after rehydration soak [h].
 	 * <p>
-	 * During rehydration in warm water, Q grows at maximum rate:
+	 * During rehydration in warm water, Q grows at the maximum rate:
 	 * dQ/dt = μ_max_ref · Q  (environment-independent)
 	 * Solution: Q(t) = Q0_dry · exp(μ_max_ref · t)
 	 * <p>
@@ -61,7 +61,7 @@ public class PhysiologicalState{
 	 *
 	 * @param q0Dry	Initial physiological state [dimensionless]
 	 * @param rehydrationDurationHours	Soak time [h]
-	 * @return	Effective Q0 at start of dough fermentation [dimensionless]
+	 * @return	Effective Q0 at start of the dough fermentation [dimensionless]
 	 */
 	public static double afterRehydration(final double q0Dry, final double rehydrationDurationHours){
 		return q0Dry * Math.exp(KineticParameters.MU_MAX_REF * rehydrationDurationHours);
@@ -72,10 +72,10 @@ public class PhysiologicalState{
 	 * <p>
 	 * λ = ln(1 + 1/Q0) / μ_max_ref
 	 * <p>
-	 * This is the time for Q to evolve from Q0 to the point where lag adjustment factor α_lag = Q / (Q+1) ≈ 0.95.
+	 * This is the time for Q to evolve from Q0 to the point where the lag adjustment factor α_lag = Q / (Q+1) ≈ 0.95.
 	 * It is INDEPENDENT of temperature and aw, because dQ/dt = μ_max_ref · Q is environment-independent.
 	 *
-	 * @param q0Effective	Physiological state at start of dough [dimensionless].
+	 * @param q0Effective	Physiological state at the start of dough fermentation [dimensionless].
 	 * @return	Lag phase duration [h].
 	 */
 	public static double lagPhaseHours(final double q0Effective){
@@ -88,7 +88,7 @@ public class PhysiologicalState{
 	/**
 	 * Lag adjustment factor: α_lag = Q / (Q + 1).
 	 * <p>
-	 * Used in the Baranyi ODE to modulate growth during lag phase.
+	 * Used in the Baranyi ODE to modulate growth during the lag phase.
 	 *
 	 * @param q	Physiological state [dimensionless].
 	 * @return	Adjustment factor ∈ [0, 1].

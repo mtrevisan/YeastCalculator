@@ -5,7 +5,7 @@ import io.github.mtrevisan.yeastcalculator.optimization.YeastOptimizer;
 import java.util.Locale;
 
 
-/** Sensitivity analysis: fermentation progress vs initial yeast fraction. */
+/** Sensitivity analysis: fermentation progress vs. the initial yeast fraction. */
 public class SensitivityAnalyzer{
 
 	private final YeastOptimizer optimizer;
@@ -16,7 +16,7 @@ public class SensitivityAnalyzer{
 	}
 
 	/**
-	 * Print sensitivity table: factor vs progress.
+	 * Print sensitivity table: factor vs. progress.
 	 */
 	public void printSensitivity(final double optimalAnhydrousYeast){
 		System.out.printf(Locale.US,

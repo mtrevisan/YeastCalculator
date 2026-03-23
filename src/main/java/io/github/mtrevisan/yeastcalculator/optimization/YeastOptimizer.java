@@ -17,7 +17,7 @@ import java.util.Locale;
 /**
  * Finds the optimal initial yeast inoculum using BrentSolver.
  * <p>
- * Target: fermentation reaches 99% of substrate-limited maximum at t_final.
+ * Target: fermentation reaches 99% of the substrate-limited maximum at t_final.
  */
 public class YeastOptimizer{
 
@@ -42,16 +42,16 @@ public class YeastOptimizer{
 
 	/**
 	 * Find optimal anhydrous yeast inoculum.
-	 *
+	 * <p>
 	 * Uses BrentSolver to find:
 	 * 	N0* = argmin { |progress(N0) − TARGET_FERMENTATION_PROGRESS| }
 	 * 		 = root of f(N0) = progress(N0) − TARGET_FERMENTATION_PROGRESS
-	 *
+	 * <p>
 	 * Search domain: (0, N_MAX_substrate)
 	 * 	Lower bound: effectively zero yeast — 1e-8 g/g
 	 * 	Upper bound: substrate ceiling — N_MAX_substrate × 0.9999 (avoids capacity_adj = 0)
 	 *
-	 * @param outputWarning	If true, print diagnostic messages when substrate ceiling is reached.
+	 * @param outputWarning	If true, print diagnostic messages when the substrate ceiling is reached.
 	 * @return	Optimal initial anhydrous yeast fraction [g_dry_yeast / g_dough].
 	 * 	Use {@link #toBakersWetPercent} or {@link #toBakersWetPercent} to convert to the wet-yeast quantity to weigh
 	 * 	on a scale.
@@ -103,9 +103,9 @@ public class YeastOptimizer{
 
 	/**
 	 * Fermentation progress function
-	 *
+	 * <p>
 	 * progress(N0) = N(t_final) / N_MAX_substrate ∈ [0, 1]
-	 *
+	 * <p>
 	 * Monotone increasing in initialAnhydrousYeastFraction for values in (0, substrateLimitedBiomassCapacity):
 	 * 	- More initial yeast → faster approach to substrate ceiling → higher progress.
 	 * 	- Using N_MAX_substrate (not a fixed broth value) ensures the bracket is valid and results are physically
@@ -121,24 +121,24 @@ public class YeastOptimizer{
 
 	/**
 	 * Estimated lag time in dough [h] — Baranyi & Roberts (1994), eq.(4).
-	 *
+	 * <p>
 	 *  λ_dough = ln(1 + 1/Q0_effective) / MU_MAX_REF
-	 *
+	 * <p>
 	 *  Q0_effective already incorporates any pre-dough rehydration soak
 	 *  (see constructor). For the total wait from the start of rehydration:
 	 *    λ_total = rehydrationDurationHours + λ_dough
 	 *  Rationale: dQ/dt = MU_MAX_REF · Q (constant, environment-independent).
-	 *  Q exits the lag state — i.e. Q/(Q+1) → 1 — after time
+	 *  Q exits the lag state — i.e., Q/(Q+1) → 1 — after time
 	 *    λ = ln(1 + 1/Q0) / MU_MAX_REF
 	 *  regardless of temperature or water activity, because those factors only
 	 *  affect the BIOMASS growth rate dN/dt, not the physiological recovery dQ/dt.
-	 *
+	 * <p>
 	 *  The denominator is MU_MAX_REF, not μ_eff: dQ/dt = MU_MAX_REF · Q is
 	 *  environment-independent (Baranyi 1994, eq. 2). Temperature and aw only
 	 *  affect dN/dt, not dQ/dt, so the lag exit time is temperature-independent.
 	 *  λ_dough is therefore a lower bound on visible leavening; the baker will
 	 *  observe significant dough rise somewhat later, when N has grown enough.
-	 *
+	 * <p>
 	 *  An infinite value is returned when stage-1 temperature is outside the viable range [T_MIN, T_MAX].
 	 */
 	public double estimatedLagTime(){
@@ -152,9 +152,9 @@ public class YeastOptimizer{
 	}
 
 	/**
-	 * Check if schedule allows sufficient fermentation time.
-	 *
-	 * Returns a warning string when the total estimated wait (rehydration + lag in dough) exceeds 50% of the total
+	 * Check if the schedule allows sufficient fermentation time.
+	 * <p>
+	 * Returns a warning string when the total estimated wait (rehydration plus lag in dough) exceeds 50% of the total
 	 * fermentation schedule, or null.
 	 * Returning the message instead of printing it lets callers embed it inline in tables — avoids interleaved
 	 * stderr/stdout noise when called in loops.
@@ -181,7 +181,7 @@ public class YeastOptimizer{
 	}
 
 	/**
-	 * Print detailed diagnostics when substrate ceiling is reached.
+	 * Print detailed diagnostics when the substrate ceiling is reached.
 	 */
 	private void printSubstrateCeilingDiagnostics(final double upperBound, final double progressAtUpperBound){
 		final double requiredScheduleExtension = (KineticParameters.TARGET_FERMENTATION_PROGRESS - progressAtUpperBound)

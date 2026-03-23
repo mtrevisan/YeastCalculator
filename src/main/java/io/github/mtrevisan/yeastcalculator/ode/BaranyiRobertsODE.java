@@ -8,7 +8,7 @@ import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
 
 /**
  * Baranyi-Roberts (1994) ODE system for S. cerevisiae in bread dough.
- *
+ * <p>
  * State: [Q, N, S, P_CO2, E_ethanol]
  * Growth equations:
  * 	dQ/dt = MU_MAX · Q	← key: constant rate, not mu_eff! Q represents intracellular enzyme reserves that
@@ -17,7 +17,7 @@ import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
  * 	dS/dt = −(1/Y_XS) · dN/dt
  * 	dP/dt = Y_PS · (−dS/dt)
  * 	dE/dt = Y_ES · (−dS/dt)
- *
+ * <p>
  * Where:
  * 	α_lag = Q / (Q + 1)                              — lag adjustment → 1 when Q >> 1
  * 	α_cap = max(0, 1 − N / N_MAX)                    — capacity adjustment → 0 at saturation
@@ -72,7 +72,7 @@ public class BaranyiRobertsODE implements FirstOrderDifferentialEquations{
 			* sugarAvailability;
 
 		//── ODE derivatives ───────────────────────────────────────────────
-		//dQ/dt uses MU_MAX_REF (not effectiveGrowthRate): Q evolves at maximum rate regardless of environment — it
+		//dQ/dt uses MU_MAX_REF (not effectiveGrowthRate): Q evolves at the maximum rate regardless of environment — it
 		// represents intracellular enzyme reserves that replenish at a fixed rate (Baranyi (1994), eq. 2)
 		derivatives[KineticParameters.IDX_PHYSIOLOGICAL_STATE] = KineticParameters.MU_MAX_REF * physiologicalState;
 

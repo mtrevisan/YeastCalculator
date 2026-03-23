@@ -27,7 +27,7 @@ public final class KineticParameters{
 	// ─ Water Activity ─
 	/**
 	 * Minimum water activity for yeast growth (S. cerevisiae). Ross (1993).
-	 * Below this threshold growth is zero.
+	 * Below this threshold, growth is zero.
 	 */
 	public static final double AW_MIN = 0.94;
 	/**
@@ -55,7 +55,7 @@ public final class KineticParameters{
 	// ─ Yields ─
 	/**
 	 * Biomass yield on glucose [g_biomass / g_glucose].
-	 * Reflects aerobic and anaerobic metabolism mix in dough.
+	 * Reflects aerobic and anaerobic metabolism mixed in dough.
 	 */
 	public static final double YIELD_BIOMASS_PER_SUGAR = 0.5;
 	/**

@@ -1,2 +1,2 @@
 # YeastCalculator
-Yeast quantity calculator for a fermented dough through a series of stages at fixed temperature
+Yeast quantity calculator for fermented dough through a series of stages at a fixed temperature
