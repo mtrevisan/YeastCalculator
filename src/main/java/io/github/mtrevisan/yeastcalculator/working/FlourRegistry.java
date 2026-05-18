@@ -16,25 +16,31 @@ public final class FlourRegistry{
 	private static final double[] K_GAB = {0.78, 0.79, 0.78, 0.76, 0.77, 0.77, 0.82, 0.75, 0.77, 0.79, 0.85, 0.81, 0.88};
 	private static final double[] BASE = {1.0, 0.96, 0.98, 0.85, 0.82, 0.85, 0.35, 0.52, 0.68, 0.78, 0.05, 0.25, 0.02};
 
-	public static class FlourProperties{
-		public final double wmBase;
-		public final double cGab;
-		public final double kGab;
-		public final double baseLookup;
 
-		public FlourProperties(final double wmBase, final double cGab, final double kGab, final double baseLookup){
+	private FlourRegistry(){}
+
+	/**
+	 * Domain Object holding unmodifiable chemical coefficients.
+	 */
+	static final class FlourProperties{
+		final double wmBase;
+		final double cGab;
+		final double kGab;
+		final double baseLookup;
+
+		private FlourProperties(final double wmBase, final double cGab, final double kGab, final double baseLookup){
 			this.wmBase = wmBase;
 			this.cGab = cGab;
 			this.kGab = kGab;
 			this.baseLookup = baseLookup;
 		}
+
 	}
 
 	/**
 	 * Resolves chemical coefficients for a flour type name.
-	 * If type is unknown, returns the default parameters (index 0 - wheat).
 	 */
-	public static FlourProperties resolveProperties(final String type){
+	static FlourProperties resolveProperties(final String type){
 		int idx = TYPES.indexOf(type);
 		if(idx == -1)
 			idx = 0;

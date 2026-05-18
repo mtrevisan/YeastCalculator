@@ -2,37 +2,38 @@ package io.github.mtrevisan.yeastcalculator.working;
 
 
 public class SimulationInputs{
-	public double[] fractionsRaw = {0.70, 0.20, 0.10};
+	private double[] fractionsRaw = {0.70, 0.20, 0.10};
 
-	public Object[][] flourMatrix = {
+	Object[][] flourMatrix = {
 		// W,		P/L,	Sugar,	Prot,	Fat,		Fiber,	Ashes,	Type
 		{300.,	0.55,	0.015,	0.13,	0.012,	0.02,		0.0055,	"wheat"},
 		{220.,	0.60,	0.010,	0.12,	0.015,	0.025,	0.0065,	"wheat semolina fine"},
 		{110.,	0.40,	0.030,	0.10,	0.020,	0.06,		0.015,	"rye"}
 	};
 
-	public double[][] stagesRaw = {
+	double[][] stagesRaw = {
 		// Temp,	RH,	Duration
 		{24.,		0.75,	2.},
 		{28.,		0.80,	3.5},
 		{4.,		0.70,	12.}
 	};
 
-	public double[] foldsRaw = {1.2, 2.5};
+	double[] foldsRaw = {1.2, 2.5};
 
-	public double doughWater = 0.65;
-	public double doughSalt = 0.02;
-	public double doughOil = 0.03;
-	public double yeastMoisture = 0.70;
+	double doughWater = 0.65;
+	double doughSalt = 0.02;
+	double doughOil = 0.03;
+	double yeastMoisture = 0.70;
 
-	public double flourTemperature = 22.;
-	public double airRelativeHumidity = 0.55;
+	double flourTemperature = 22.;
+	double airRelativeHumidity = 0.55;
 
-	public int getFlourCount(){
+
+	int getFlourCount(){
 		return fractionsRaw.length;
 	}
 
-	public double[] getFractions(){
+	double[] getFractions(){
 		final int flours = fractionsRaw.length;
 		double sumFractions = 0.;
 		for(final double f : fractionsRaw)

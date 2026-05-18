@@ -1,6 +1,7 @@
 package io.github.mtrevisan.yeastcalculator.working;
 
-public final class YeastFermentationModel{
+
+final class YeastFermentationModel{
 
 	// Microorganism biological constants (Saccharomyces cerevisiae)
 	private static final double TEMP_MIN = 4.;
@@ -10,6 +11,9 @@ public final class YeastFermentationModel{
 	private static final double POTENTIAL_MU_MAX = 205.;
 	private static final double SUGAR_AFFINITY_K = 0.005; // Monod-like half-velocity constant
 	private static final double SUGAR_CONSUMPTION_COEFF = 0.015;
+
+
+	private YeastFermentationModel(){}
 
 	/**
 	 * Cardinal Temperature Model with Inspection (CTMI) — Rosso et al. (1995).

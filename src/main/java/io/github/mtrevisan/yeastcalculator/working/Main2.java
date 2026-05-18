@@ -7,7 +7,7 @@ import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.solvers.BisectionSolver;
 
 
-public class Main2{
+public final class Main2{
 
 	public static void main(final String[] args){
 		final SimulationInputs inputs = new SimulationInputs();
