@@ -15,7 +15,7 @@ public class SimulationInputs{
 
 	private StageInput[] stages = {
 //		new StageInput(24., 0.75, 2.),
-//		new StageInput(28., 0.80, 3)5},
+//		new StageInput(28., 0.80, 3.5},
 //		new StageInput(4., 0.70, 12.)
 		new StageInput(26., 0.55, 2.)
 	};
