@@ -1,14 +1,14 @@
-package io.github.mtrevisan.yeastcalculator.working;
+package io.github.mtrevisan.yeastcalculator.working.simulation;
 
 import org.apache.commons.math3.ode.events.EventHandler;
 
 
-final class FoldEventHandler implements EventHandler{
+public final class FoldEventHandler implements EventHandler{
 
 	private final double[] folds;
 
 
-	FoldEventHandler(final double[] folds){
+	public FoldEventHandler(final double[] folds){
 		this.folds = folds;
 	}
 

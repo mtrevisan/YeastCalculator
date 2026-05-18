@@ -1,4 +1,4 @@
-package io.github.mtrevisan.yeastcalculator.working;
+package io.github.mtrevisan.yeastcalculator.working.domain;
 
 
 public final class StageInput{
@@ -16,15 +16,15 @@ public final class StageInput{
 	}
 
 
-	double getTemperature(){
+	public double getTemperature(){
 		return temperature;
 	}
 
-	double getRelativeHumidity(){
+	public double getRelativeHumidity(){
 		return relativeHumidity;
 	}
 
-	double getDuration(){
+	public double getDuration(){
 		return durationHours;
 	}
 

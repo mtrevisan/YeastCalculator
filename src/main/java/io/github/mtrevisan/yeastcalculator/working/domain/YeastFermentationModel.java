@@ -1,7 +1,7 @@
-package io.github.mtrevisan.yeastcalculator.working;
+package io.github.mtrevisan.yeastcalculator.working.domain;
 
 
-final class YeastFermentationModel{
+public final class YeastFermentationModel{
 
 	// Saccharomyces cerevisiae thermal cardinal boundaries (Rosso et al., 1995)
 	private static final double TEMP_MIN = 4.;
@@ -19,15 +19,34 @@ final class YeastFermentationModel{
 	// Flour Alpha-Amylase maximum conversion velocity (starch -> maltose conversion)
 	private static final double AMYLASE_VMAX_BASE = 0.008;
 
+	// Biochemical inhibition multipliers (Fixed Osmotic Code Smell constants)
+	private static final double SALT_INHIBITION_MULTIPLIER = -15.;
+	private static final double OIL_INHIBITION_LINEAR_COEFF = 5.;
+	private static final double OIL_INHIBITION_EXP_COEFF = -8.;
+
 
 	private YeastFermentationModel(){}
 
 
 	/**
+	 * Calculates the osmotic cell-stress inhibition coefficient driven by salt concentration.
+	 */
+	public static double calculateSaltInhibition(final double salt){
+		return Math.exp(SALT_INHIBITION_MULTIPLIER * salt);
+	}
+
+	/**
+	 * Calculates the structural lipid barrier and cell hydration inhibition coefficient driven by oil concentration.
+	 */
+	public static double calculateOilInhibition(final double oil){
+		return (1. + OIL_INHIBITION_LINEAR_COEFF * oil) * Math.exp(OIL_INHIBITION_EXP_COEFF * oil);
+	}
+
+	/**
 	 * Cardinal Temperature Model with Inspection (CTMI) — Rosso et al. (1995).
 	 * Evaluates the thermal scaling factor [0., 1.] for yeast metabolic activity.
 	 */
-	static double calculateThermalEfficiency(final double temperature){
+	public static double calculateThermalEfficiency(final double temperature){
 		if(temperature <= TEMP_MIN || temperature >= TEMP_MAX)
 			return 0.;
 
@@ -44,9 +63,7 @@ final class YeastFermentationModel{
 	 */
 	public static double calculateBiomassGrowthRate(final double yeast, final double alphaBio,
 			final double lag, final double sugar, final double saltK, final double oilK){
-		// Substrate-limiting Monod kinetics parameter
 		final double sugarK = sugar / (sugar + SUGAR_AFFINITY_K);
-		// Sigmoidal lag phase transition factor representing enzyme adjustment
 		final double lagTransition = 1. / (1. + Math.exp(-4. * (lag - 0.5)));
 		return POTENTIAL_MU_MAX * yeast * alphaBio * saltK * oilK * sugarK * lagTransition;
 	}
@@ -55,16 +72,14 @@ final class YeastFermentationModel{
 	 * Calculates the net sugar rate (dSugar/dt).
 	 * Accounts for concurrent enzymatic starch breakdown (generation) and yeast metabolism (consumption).
 	 */
-	static double calculateNetSugarRate(final double sugar, final double muBio, final double yeas,
-			final double temperature){
+	public static double calculateNetSugarRate(final double sugar, final double muBio, final double yeas,
+		final double temperature){
 		if(sugar <= 0. && muBio <= 0.)
 			return 0.;
 
-		// Arrhenius-like activation for flour amylase activity based on temperature
 		final double amylaseThermalK = Math.exp(0.06 * (temperature - 20.))
 			* (1. - 0.005 * Math.pow(temperature - 35., 2));
 		final double sugarGeneration = AMYLASE_VMAX_BASE * StrictMath.max(0., amylaseThermalK);
-		// Total metabolic uptake (Growth requirements + cellular maintenance)
 		final double sugarConsumption = muBio * YEAST_SUGAR_YIELD_Y + yeas * MAINTENANCE_COEFF_M;
 		return sugarGeneration - sugarConsumption;
 	}
