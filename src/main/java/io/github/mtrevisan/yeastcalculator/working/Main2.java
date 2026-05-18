@@ -11,21 +11,20 @@ public class Main2{
 
 	public static void main(final String[] args){
 		final SimulationInputs inputs = new SimulationInputs();
-		final double dt = 2.0 / 60.0;
+		final double dt = 2. / 60.;
 		final double result = calculateOptimalYeast(inputs, dt);
 		System.out.printf("Optimal Commercial Yeast Quantity: %.6f%n", result);
 	}
 
 	public static double calculateOptimalYeast(final SimulationInputs in, final double dt){
-		// 1. Flour Normalization
 		final int flours = in.getFlourCount();
 		final double[] fractions = in.getFractions();
 
-		// 2. GAB Moisture Modeling (Delegated to external isolated class)
-		final SimulationInputs.GabResult gab = SimulationInputs.calculateMoisture(in, fractions);
+		// 2. GAB Moisture Modeling
+		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(in, fractions);
 		final double flourMoisture = gab.flourActiveWater + gab.flourStrictlyBoundWater;
 
-		// 3. Weighted Flour Property Aggregation (Dot Product via Domain Lookups)
+		// 3. Weighted Flour Property Aggregation (Dot Product)
 		double dotStrength = 0, dotPL = 0, dotSugar = 0, dotProtein = 0, dotFiber = 0, dotAsh = 0, dotγ = 0;
 
 		for(int i = 0; i < flours; i++){
@@ -38,10 +37,9 @@ public class Main2{
 			final double ash = ((Number)in.flourMatrix[i][6]).doubleValue();
 			final String type = (String)in.flourMatrix[i][7];
 
-			// Resolve the standard index and parameters directly from SimulationInputs
-			final int fidx = in.getFlourTypeIndex(type);
-			final double base = in.getBaseLookupValue(fidx);
-			final double γ_i = base * Math.exp(-2.0 * fats) * Math.exp(-0.5 * sugar);
+			// Isolated chemical lookup via domain registry
+			final FlourRegistry.FlourProperties props = FlourRegistry.resolveProperties(type);
+			final double γ_i = props.baseLookup * Math.exp(-2. * fats) * Math.exp(-0.5 * sugar);
 
 			dotStrength += strength * fractions[i];
 			dotPL += pl * fractions[i];
@@ -53,12 +51,12 @@ public class Main2{
 		}
 
 		// 4. Bio-Mechanical Dough Environment Setup
-		final double waterEff = (in.doughWater + flourMoisture) / (1.0 - flourMoisture);
-		final double stiffnessIndexBase = dotStrength * dotProtein / (dotPL * (1.0 + 2.0 * dotFiber + 5.0 * dotAsh)) * dotγ;
-		final double vTarget = 1.0 + 0.005 * stiffnessIndexBase / (1.0 + Math.pow(waterEff - 0.6, 2));
+		final double waterEff = (in.doughWater + flourMoisture) / (1. - flourMoisture);
+		final double stiffnessIndexBase = dotStrength * dotProtein / (dotPL * (1. + 2. * dotFiber + 5. * dotAsh)) * dotγ;
+		final double vTarget = 1. + 0.005 * stiffnessIndexBase / (1. + Math.pow(waterEff - 0.6, 2));
 		final double sugarInitial = dotSugar + 0.01;
-		final double saltK = Math.exp(-15.0 * in.doughSalt);
-		final double oilK = (1.0 + 5.0 * in.doughOil) * Math.exp(-8.0 * in.doughOil);
+		final double saltK = Math.exp(-15. * in.doughSalt);
+		final double oilK = (1. + 5. * in.doughOil) * Math.exp(-8. * in.doughOil);
 
 		// 5. Timeline Discretization & Stage Indexing
 		final double[][] stages = Arrays.stream(in.stagesRaw)
@@ -99,7 +97,7 @@ public class Main2{
 		final BisectionSolver solver = new BisectionSolver(absoluteAccuracy);
 		final double yDryOptimal = solver.solve(maxEvaluations, targetFunction, lowerBound, upperBound);
 
-		return yDryOptimal / (1.0 - in.yeastMoisture);
+		return yDryOptimal / (1. - in.yeastMoisture);
 	}
 
 	// --- CONTINUOUS TIME ITERATIVE FERMENTATION SIMULATION ---
@@ -107,11 +105,11 @@ public class Main2{
 		final int[] stagesIdx, final double[][] stages, final double[] folds,
 		final double stiffnessIndexBase, final double sugarInitial, final double saltK, final double oilK){
 
-		double vPrev = 1.0;
+		double vPrev = 1.;
 		double stiffnessIndexPrev = stiffnessIndexBase;
-		double lagPrev = 0.0;
+		double lagPrev = 0.;
 		double sugarPrev = sugarInitial;
-		double tPrev = 0.0;
+		double tPrev = 0.;
 
 		for(int step = 1; step <= totalSteps; step++){
 			final double tCurrTime = step * dt;
@@ -120,6 +118,7 @@ public class Main2{
 			final double tCurr = stages[stageIdx][0];
 			final double rhCurr = stages[stageIdx][1];
 
+			// 1. Structural Dough Mechanics (Folds & Rheology)
 			boolean isFoldStep = false;
 			for(final double fold : folds){
 				if(fold > tPrev && fold <= tCurrTime){
@@ -128,30 +127,35 @@ public class Main2{
 				}
 			}
 
-			final double stiffnessTarget = stiffnessIndexBase / ((rhCurr < 0.60) ? (0.50 + 0.50 * (rhCurr / 0.60)) : 1.0);
-			final double proteolysisRate = 0.002 * Math.exp(0.07 * (tCurr - 20.0));
+			final double stiffnessTarget = stiffnessIndexBase / ((rhCurr < 0.60) ? (0.50 + 0.50 * (rhCurr / 0.60)) : 1.);
+			final double proteolysisRate = 0.002 * Math.exp(0.07 * (tCurr - 20.));
 			final double stiffnessRelaxed = stiffnessTarget * Math.exp(-proteolysisRate * tCurrTime);
 
-			final double stiffnessIndexDynamic = isFoldStep
+			final double stiffnessIndexDynamic = (isFoldStep
 				? stiffnessIndexPrev * 1.35
-				: stiffnessRelaxed + (stiffnessIndexPrev - stiffnessRelaxed) * Math.exp(-1.8 * dt);
+				: stiffnessRelaxed + (stiffnessIndexPrev - stiffnessRelaxed) * Math.exp(-1.8 * dt));
 
-			final double alphaBio = calculateCtmi(tCurr, 4.0, 34.0, 42.0);
+			// 2. Microorganism Biology (Delegated to YeastFermentationModel)
+			final double alphaBio = YeastFermentationModel.calculateThermalEfficiency(tCurr);
 			final double lagNew = lagPrev + dt * alphaBio;
 
-			final double sugarK = sugarPrev / (sugarPrev + 0.005);
-			final double muBio = 205.0 * yDry * alphaBio * saltK * oilK * sugarK / (1.0 + Math.exp(-4.0 * (lagPrev - 0.5)));
+			final double muBio = YeastFermentationModel.calculateBiomassGrowthRate(
+				yDry, alphaBio, lagPrev, sugarPrev, saltK, oilK
+			);
+			final double sugarNew = YeastFermentationModel.consumeSugar(sugarPrev, muBio, dt);
+
+			// 3. Bio-Mechanical Coupling (How yeast gas interacts with dough macrostructures)
 			final double muEff = muBio * stiffnessIndexBase / stiffnessIndexPrev;
 
-			final double sugarNew = Math.max(0.0, sugarPrev - (muBio * 0.015 * dt));
+			final double pressureFactor = (vPrev - 1.) * stiffnessIndexDynamic / stiffnessIndexBase;
+			final double leakingCoeff = 1. / (1. + Math.exp(-12. * (pressureFactor - 1.8)));
+			final double leakingK = 1. - (leakingCoeff * 0.4);
 
-			final double pressureFactor = (vPrev - 1.0) * stiffnessIndexDynamic / stiffnessIndexBase;
-			final double leakingCoeff = 1.0 / (1.0 + Math.exp(-12.0 * (pressureFactor - 1.8)));
-			final double leakingK = 1.0 - (leakingCoeff * 0.4);
-
+			// 4. Volume State Update
 			final double vGenerated = vPrev + muEff * vPrev * dt * leakingK;
-			final double vNew = isFoldStep ? (1.0 + (vGenerated - 1.0) * 0.75) : vGenerated;
+			final double vNew = isFoldStep ? (1. + (vGenerated - 1.) * 0.75) : vGenerated;
 
+			// State Migration for Next Iteration
 			vPrev = vNew;
 			stiffnessIndexPrev = stiffnessIndexDynamic;
 			lagPrev = lagNew;
@@ -160,20 +164,6 @@ public class Main2{
 		}
 
 		return vPrev;
-	}
-
-	// Cardinal Temperature Model with Inspection — Rosso et al. (1995)
-	private static double calculateCtmi(final double temperature, final double yeastTemperatureMin,
-		final double yeastTemperatureOpt, final double yeastTemperatureMax){
-		if(temperature <= yeastTemperatureMin || temperature >= yeastTemperatureMax){
-			return 0.0;
-		}
-
-		final double numerator = (temperature - yeastTemperatureMax) * Math.pow(temperature - yeastTemperatureMin, 2);
-		final double denominator = (yeastTemperatureOpt - yeastTemperatureMin)
-			* ((yeastTemperatureOpt - yeastTemperatureMin) * (temperature - yeastTemperatureOpt)
-			- (yeastTemperatureOpt - yeastTemperatureMax) * (yeastTemperatureOpt + yeastTemperatureMin - 2.0 * temperature));
-		return numerator / denominator;
 	}
 
 }
