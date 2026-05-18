@@ -21,13 +21,15 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	private static final double GAS_CONSTANT_R = 0.08206;
 	private static final double TEMPERATURE_KELVIN_OFFSET = 273.15;
 	private static final double STOICHIOMETRIC_CO2_YIELD = 0.48;
-	private static final double MIN_VOLUME_BOUND = 0.1;
+
 	private static final double MIN_STIFFNESS_BOUND = 10.0;
 	private static final double PERMEABILITY_DECAY_RATE = -3.5;
 
+	private static final double INITIAL_GAS_POROSITY = 0.05;
+
 
 	public DoughOdeSystem(final double yDry, final StageInput[] stages, final double stiffnessIndexBase,
-			final double saltK, final double oilK, final double waterContent){
+		final double saltK, final double oilK, final double waterContent){
 		this.yDry = yDry;
 		this.stages = stages;
 		this.stiffnessIndexBase = stiffnessIndexBase;
@@ -39,7 +41,6 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 	@Override
 	public int getDimension(){
-		// y[0]=Volume, y[1]=Lag, y[2]=Sugar, y[3]=Dissolved CO2
 		return 4;
 	}
 
@@ -64,23 +65,26 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 			stageStart += stageDuration;
 		}
 
+		// Clamped temperature evaluation for safety
+		final double tClamped = Math.clamp(tCurr, 4.0, 45.0);
+
 		// 2. Henry's law temperature adjustments
-		final double temperatureCorrection = Math.exp(2400. * (1. / (tCurr + TEMPERATURE_KELVIN_OFFSET) - 1. / 298.15));
+		final double temperatureCorrection = Math.exp(2400. * (1. / (tClamped + TEMPERATURE_KELVIN_OFFSET) - 1. / 298.15));
 		final double dynamicSaturationLimit = CO2_SATURATION_LIMIT * temperatureCorrection * (1. + 0.5 * saltK);
 
 		// 3. Structural Stiffness relaxation
-		final double humidityDeficitFactor = (rhCurr < 0.60? 0.50 + 0.50 * (rhCurr / 0.60): 1.);
-		final double stiffnessTarget = stiffnessIndexBase / humidityDeficitFactor;
-		final double proteolysisRate = 0.0015 * Math.exp(0.08 * (tCurr - 20.));
+		final double humidityDeficitFactor = Math.exp(-1.2 * (rhCurr - 1.0));
+		final double stiffnessTarget = stiffnessIndexBase * humidityDeficitFactor;
+		final double proteolysisRate = 0.0015 * Math.exp(0.08 * (tClamped - 20.));
 		final double dynamicStiffness = stiffnessTarget * Math.exp(-proteolysisRate * t);
 
 		// 4. Biological Core Integration
-		final double alphaBio = YeastFermentationModel.calculateThermalEfficiency(tCurr);
+		final double alphaBio = YeastFermentationModel.calculateThermalEfficiency(tClamped);
 		final double muBio = YeastFermentationModel.calculateBiomassGrowthRate(yDry, alphaBio, lagCurr, sugarCurr,
 			saltK, oilK);
 
 		yDot[1] = alphaBio;
-		yDot[2] = YeastFermentationModel.calculateNetSugarRate(sugarCurr, muBio, yDry, tCurr);
+		yDot[2] = YeastFermentationModel.calculateNetSugarRate(sugarCurr, muBio, yDry, tClamped);
 
 		// 5. Gas Partitioning Kinetics
 		final double totalCo2ProductionRate = muBio * STOICHIOMETRIC_CO2_YIELD;
@@ -98,8 +102,9 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		if(gasDesorptionRate <= 0.)
 			yDot[0] = 0.;
 		else{
-			final double internalPressure = (gasDesorptionRate * GAS_CONSTANT_R * (tCurr + TEMPERATURE_KELVIN_OFFSET))
-				/ StrictMath.max(MIN_VOLUME_BOUND, vCurr - 1.);
+			final double netGasVolume = (vCurr - 1.0) + INITIAL_GAS_POROSITY;
+			final double internalPressure = (gasDesorptionRate * GAS_CONSTANT_R * (tClamped + TEMPERATURE_KELVIN_OFFSET))
+				/ netGasVolume;
 
 			double matrixPermeabilityK = 1.;
 			if(vCurr > GLUTEN_POROSITY_THRESHOLD){

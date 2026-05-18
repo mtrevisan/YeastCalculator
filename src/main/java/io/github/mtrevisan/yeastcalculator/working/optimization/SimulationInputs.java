@@ -70,7 +70,7 @@ public class SimulationInputs{
 			dotγ += γ_i * f;
 		}
 
-		final double rawStiffnessBase = dotStrength * dotProtein / (dotPL * (1. + 2. * dotFiber + 5. * dotAsh)) * dotγ;
+		final double rawStiffnessBase = (dotStrength / dotPL) * (dotProtein / (1. + 2. * dotFiber + 5. * dotAsh)) * dotγ;
 
 		// Viscoelastic hydration modifier logic integrated here
 		final double waterEff = (doughWater + flourMoisture) / (1. - flourMoisture);
