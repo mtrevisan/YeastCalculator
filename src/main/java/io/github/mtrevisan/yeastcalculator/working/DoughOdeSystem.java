@@ -6,7 +6,7 @@ import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
 final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 	private final double yDry;
-	private final double[][] stages;
+	private final StageInput[] stages;
 	private final double stiffnessIndexBase;
 	private final double saltK;
 	private final double oilK;
@@ -18,7 +18,7 @@ final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	private static final double GLUTEN_POROSITY_THRESHOLD = 2.2;
 
 
-	DoughOdeSystem(final double yDry, final double[][] stages, final double stiffnessIndexBase,
+	DoughOdeSystem(final double yDry, final StageInput[] stages, final double stiffnessIndexBase,
 			final double saltK, final double oilK, final double waterContent){
 		this.yDry = yDry;
 		this.stages = stages;
@@ -47,13 +47,13 @@ final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 		// 1. Resolve environmental boundaries
 		double stageStart = 0.;
-		double tCurr = stages[0][0];
-		double rhCurr = stages[0][1];
-		for(final double[] stage : stages){
-			final double stageDuration = stage[2];
+		double tCurr = stages[0].getTemperature();
+		double rhCurr = stages[0].getRelativeHumidity();
+		for(final StageInput stage : stages){
+			final double stageDuration = stage.getDuration();
 			if(t >= stageStart && t <= (stageStart + stageDuration)){
-				tCurr = stage[0];
-				rhCurr = stage[1];
+				tCurr = stage.getTemperature();
+				rhCurr = stage.getRelativeHumidity();
 				break;
 			}
 			stageStart += stageDuration;

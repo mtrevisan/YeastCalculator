@@ -23,7 +23,7 @@ final class GabMoistureModel{
 		double mixTotalDB = 0.;
 		double mixBoundDB = 0.;
 
-		final double aw = clamp(in.getAirRelativeHumidity(), 0.1, 0.95);
+		final double aw = Math.clamp(in.getAirRelativeHumidity(), 0.1, 0.95);
 		final double temperatureCoeff = 1. - 0.0025 * (in.getFlourTemperature() - 20.);
 		final FlourInput[] matrix = in.getFlourMatrix();
 
@@ -38,7 +38,7 @@ final class GabMoistureModel{
 			final double wmDb = wmBase + 0.085 * protein + 0.12 * fiber;
 			final double uEquilibriumDB = (wmDb * cGab * kGab * aw)
 				/ ((1. - kGab * aw) * (1. - kGab * aw + cGab * kGab * aw));
-			final double uTotalDB = clamp(uEquilibriumDB * temperatureCoeff, 0.08, 0.2);
+			final double uTotalDB = Math.clamp(uEquilibriumDB * temperatureCoeff, 0.08, 0.2);
 
 			mixTotalDB += uTotalDB * fractions[i];
 			mixBoundDB += wmDb * fractions[i];
@@ -48,10 +48,6 @@ final class GabMoistureModel{
 		final double flourStrictlyBoundWater = mixBoundDB / (1. + mixBoundDB);
 
 		return new GabResult(flourStrictlyBoundWater, moistureTotal - flourStrictlyBoundWater);
-	}
-
-	private static double clamp(final double x, final double min, final double max){
-		return StrictMath.max(StrictMath.min(x, min), max);
 	}
 
 }

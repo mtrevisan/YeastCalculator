@@ -64,18 +64,20 @@ public final class Main2{
 		final double oilK = (1. + 5. * in.getDoughOil()) * Math.exp(-8. * in.getDoughOil());
 
 		// 4. Extract Stages
-		final double[][] stages = Arrays.stream(in.getStages())
-			.filter(r -> r.length >= 3 && r[2] > 0)
-			.toArray(double[][]::new);
+		final StageInput[] stages = Arrays.stream(in.getStages())
+			.filter(s -> s != null && s.getDuration() > 0.)
+			.toArray(StageInput[]::new);
 
-		final double totalDurationHours = Arrays.stream(stages).mapToDouble(r -> r[2]).sum();
+		final double totalDuration = Arrays.stream(stages)
+			.mapToDouble(s -> s.getDuration())
+			.sum();
 		final double[] folds = (in.getFolds() == null) ? new double[0] : in.getFolds();
 
 		// 5. Target Objective Function
 		final UnivariateFunction targetFunction = new UnivariateFunction(){
 			@Override
 			public double value(double yDry){
-				final FirstOrderIntegrator integrator = new DormandPrince853Integrator(1e-6, totalDurationHours,
+				final FirstOrderIntegrator integrator = new DormandPrince853Integrator(1e-6, totalDuration,
 					1e-6, 1e-6);
 
 				if(folds.length > 0)
@@ -89,7 +91,7 @@ public final class Main2{
 				// Volume = 1., Lag = 0., Sugar = sugarInitial, Dissolved CO2 = 0.0
 				final double[] y = {1., 0., sugarInitial, 0.};
 
-				integrator.integrate(ode, 0., y, totalDurationHours, y);
+				integrator.integrate(ode, 0., y, totalDuration, y);
 				return y[0] - vTarget;
 			}
 		};
