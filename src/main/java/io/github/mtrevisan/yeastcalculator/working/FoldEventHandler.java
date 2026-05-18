@@ -7,9 +7,11 @@ final class FoldEventHandler implements EventHandler{
 
 	private final double[] folds;
 
+
 	FoldEventHandler(final double[] folds){
 		this.folds = folds;
 	}
+
 
 	@Override
 	public void init(double t0, double[] y0, double t){}
@@ -35,9 +37,12 @@ final class FoldEventHandler implements EventHandler{
 
 	@Override
 	public void resetState(double t, double[] y){
-		// Apply immediate macrostructural volume deflation caused by degas folding
+		// Physical Degassing: Gas bubbles are mechanical crushed out of existence (V -> 1.0)
 		final double vGenerated = y[0];
-		y[0] = 1. + (vGenerated - 1.) * 0.75;
+		y[0] = 1.0 + (vGenerated - 1.0) * 0.15; // 85% of pocket gas is expelled
+
+		// Dissolved chemical CO2 in the water is unaffected by physical folding mechanics
+		// y[3] remains unchanged
 	}
 
 }

@@ -3,25 +3,34 @@ package io.github.mtrevisan.yeastcalculator.working;
 
 final class YeastFermentationModel{
 
-	// Microorganism biological constants (Saccharomyces cerevisiae)
+	// Saccharomyces cerevisiae thermal cardinal boundaries (Rosso et al., 1995)
 	private static final double TEMP_MIN = 4.;
 	private static final double TEMP_OPT = 34.;
 	private static final double TEMP_MAX = 42.;
 
+	// Kinetic constants
 	private static final double POTENTIAL_MU_MAX = 205.;
-	private static final double SUGAR_AFFINITY_K = 0.005; // Monod-like half-velocity constant
-	private static final double SUGAR_CONSUMPTION_COEFF = 0.015;
+	private static final double SUGAR_AFFINITY_K = 0.005;
+	// Stoichiometric coefficient: kg of sugar consumed per kg of biomass generated
+	private static final double YEAST_SUGAR_YIELD_Y = 0.015;
+	// Maintenance coefficient: sugar consumed just to keep cells alive per hour, even without growth
+	private static final double MAINTENANCE_COEFF_M = 0.0012;
+
+	// Flour Alpha-Amylase maximum conversion velocity (starch -> maltose conversion)
+	private static final double AMYLASE_VMAX_BASE = 0.008;
 
 
 	private YeastFermentationModel(){}
+
 
 	/**
 	 * Cardinal Temperature Model with Inspection (CTMI) — Rosso et al. (1995).
 	 * Evaluates the thermal scaling factor [0., 1.] for yeast metabolic activity.
 	 */
-	public static double calculateThermalEfficiency(final double temperature){
-		if(temperature <= TEMP_MIN || temperature >= TEMP_MAX)
+	static double calculateThermalEfficiency(final double temperature){
+		if(temperature <= TEMP_MIN || temperature >= TEMP_MAX){
 			return 0.;
+		}
 
 		final double numerator = (temperature - TEMP_MAX) * Math.pow(temperature - TEMP_MIN, 2);
 		final double denominator = (TEMP_OPT - TEMP_MIN)
@@ -48,10 +57,22 @@ final class YeastFermentationModel{
 	}
 
 	/**
-	 * Calculates the sugar consumption during the time step using a linear metabolic yield relation.
+	 * Calculates the net sugar rate (dSugar/dt).
+	 * Accounts for concurrent enzymatic starch breakdown (generation) and yeast metabolism (consumption).
 	 */
-	public static double consumeSugar(final double sugarPrev, final double muBio, final double dt){
-		return Math.max(0., sugarPrev - (muBio * SUGAR_CONSUMPTION_COEFF * dt));
+	static double calculateNetSugarRate(final double sugarCurr, final double muBio, final double yDry, final double tCurr){
+		if(sugarCurr <= 0.0 && muBio <= 0.0){
+			return 0.0;
+		}
+
+		// Arrhenius-like activation for flour amylase activity based on temperature
+		final double amylaseThermalK = Math.exp(0.06 * (tCurr - 20.0)) * (1.0 - 0.005 * Math.pow(tCurr - 35.0, 2));
+		final double sugarGeneration = AMYLASE_VMAX_BASE * Math.max(0.0, amylaseThermalK);
+
+		// Total metabolic uptake (Growth requirements + cellular maintenance)
+		final double sugarConsumption = (muBio * YEAST_SUGAR_YIELD_Y) + (yDry * MAINTENANCE_COEFF_M);
+
+		return sugarGeneration - sugarConsumption;
 	}
 
 }

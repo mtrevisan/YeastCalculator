@@ -19,9 +19,9 @@ final class GabMoistureModel{
 		double mixTotalDB = 0.;
 		double mixBoundDB = 0.;
 
-		final double aw = StrictMath.max(StrictMath.min(in.airRelativeHumidity, 0.95), 0.1);
-		final double temperatureCoeff = 1. - 0.0025 * (in.flourTemperature - 20.);
-		final Object[][] matrix = in.flourMatrix;
+		final double aw = StrictMath.max(StrictMath.min(in.getAirRelativeHumidity(), 0.95), 0.1);
+		final double temperatureCoeff = 1. - 0.0025 * (in.getFlourTemperature() - 20.);
+		final Object[][] matrix = in.getFlourMatrix();
 
 		for(int i = 0; i < fractions.length; i++){
 			final double protein = ((Number)matrix[i][3]).doubleValue();

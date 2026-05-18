@@ -23,16 +23,11 @@ public final class Main2{
 		// 1. GAB Moisture Modeling
 		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(in, fractions);
 		final double flourMoisture = gab.flourActiveWater + gab.flourStrictlyBoundWater;
+		final double totalWaterContent = (in.getDoughWater() + flourMoisture) / (1.0 + in.getDoughWater());
 
 		// 2. Weighted Flour Property Aggregation (Dot Product)
-		double dotStrength = 0.;
-		double dotPL = 0.;
-		double dotSugar = 0.;
-		double dotProtein = 0.;
-		double dotFiber = 0.;
-		double dotAsh = 0.;
-		double dotγ = 0.;
-		final Object[][] matrix = in.flourMatrix;
+		double dotStrength = 0, dotPL = 0, dotSugar = 0, dotProtein = 0, dotFiber = 0, dotAsh = 0, dotγ = 0;
+		final Object[][] matrix = in.getFlourMatrix();
 
 		for(int i = 0; i < flours; i++){
 			final double strength = ((Number)matrix[i][0]).doubleValue();
@@ -45,7 +40,7 @@ public final class Main2{
 			final String type = (String)matrix[i][7];
 
 			final FlourRegistry.FlourProperties props = FlourRegistry.resolveProperties(type);
-			final double γ_i = props.baseLookup * Math.exp(-2. * fats) * Math.exp(-0.5 * sugar);
+			final double γ_i = props.baseLookup * Math.exp(-2.0 * fats) * Math.exp(-0.5 * sugar);
 
 			dotStrength += strength * fractions[i];
 			dotPL += pl * fractions[i];
@@ -57,47 +52,43 @@ public final class Main2{
 		}
 
 		// 3. Bio-Mechanical Dough Environment Setup
-		final double waterEff = (in.doughWater + flourMoisture) / (1. - flourMoisture);
-		final double stiffnessIndexBase = dotStrength * dotProtein / (dotPL * (1. + 2. * dotFiber + 5. * dotAsh)) * dotγ;
-		final double vTarget = 1. + 0.005 * stiffnessIndexBase / (1. + Math.pow(waterEff - 0.6, 2));
+		final double waterEff = (in.getDoughWater() + flourMoisture) / (1.0 - flourMoisture);
+		final double stiffnessIndexBase = dotStrength * dotProtein / (dotPL * (1.0 + 2.0 * dotFiber + 5.0 * dotAsh)) * dotγ;
+		final double vTarget = 1.0 + 0.005 * stiffnessIndexBase / (1.0 + Math.pow(waterEff - 0.6, 2));
 		final double sugarInitial = dotSugar + 0.01;
-		final double saltK = Math.exp(-15. * in.doughSalt);
-		final double oilK = (1. + 5. * in.doughOil) * Math.exp(-8. * in.doughOil);
+		final double saltK = Math.exp(-15.0 * in.getDoughSalt());
+		final double oilK = (1.0 + 5.0 * in.getDoughOil()) * Math.exp(-8.0 * in.getDoughOil());
 
-		// 4. Extract Profiles and Total Fermentation Lifespan (T max)
-		final double[][] stages = Arrays.stream(in.stagesRaw)
+		// 4. Extract Stages
+		final double[][] stages = Arrays.stream(in.getStagesRaw())
 			.filter(r -> r.length >= 3 && r[2] > 0)
 			.toArray(double[][]::new);
 
 		final double totalDurationHours = Arrays.stream(stages).mapToDouble(r -> r[2]).sum();
-		final double[] folds = (in.foldsRaw == null) ? new double[0] : in.foldsRaw;
+		final double[] folds = (in.getFoldsRaw() == null) ? new double[0] : in.getFoldsRaw();
 
-		// 5. Target Objective Function for the Bisection Root Finder
+		// 5. Target Objective Function
 		final UnivariateFunction targetFunction = new UnivariateFunction(){
 			@Override
 			public double value(double yDry){
-				// Adaptive step-size integrator setup (Dormand-Prince 8(5,3))
 				final FirstOrderIntegrator integrator = new DormandPrince853Integrator(1e-6, totalDurationHours, 1e-6, 1e-6);
 
-				// Add discrete event handler interceptor for folds
 				if(folds.length > 0){
 					integrator.addEventHandler(new FoldEventHandler(folds), 0.01, 1e-4, 100);
 				}
 
-				final DoughOdeSystem ode = new DoughOdeSystem(yDry, stages, folds, stiffnessIndexBase, saltK, oilK);
+				final DoughOdeSystem ode = new DoughOdeSystem(yDry, stages, stiffnessIndexBase, saltK, oilK, totalWaterContent);
 
-				// Initial boundary states at t = 0.
-				final double[] y = {1., 0., sugarInitial}; // Volume=1., Lag=0., Initial Sugar
+				// Initial boundary conditions:
+				// Volume = 1.0, Lag = 0.0, Sugar = sugarInitial, Dissolved CO2 = 0.0
+				final double[] y = {1.0, 0.0, sugarInitial, 0.0};
 
-				// Solve the entire time profile analytically using dynamic adaptive steps
-				integrator.integrate(ode, 0., y, totalDurationHours, y);
-
-				// Return residual delta compared to target volume constraint
+				integrator.integrate(ode, 0.0, y, totalDurationHours, y);
 				return y[0] - vTarget;
 			}
 		};
 
-		// 6. Solvers execution
+		// 6. Solvers Execution
 		final double lowerBound = 0.0001;
 		final double upperBound = 0.15;
 		final double absoluteAccuracy = 1e-7;
@@ -106,7 +97,7 @@ public final class Main2{
 		final BisectionSolver solver = new BisectionSolver(absoluteAccuracy);
 		final double yDryOptimal = solver.solve(maxEvaluations, targetFunction, lowerBound, upperBound);
 
-		return yDryOptimal / (1. - in.yeastMoisture);
+		return yDryOptimal / (1.0 - in.getYeastMoisture());
 	}
 
 }
