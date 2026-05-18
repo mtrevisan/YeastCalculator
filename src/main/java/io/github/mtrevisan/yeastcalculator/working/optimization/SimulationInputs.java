@@ -6,6 +6,15 @@ import io.github.mtrevisan.yeastcalculator.working.domain.FlourType;
 import io.github.mtrevisan.yeastcalculator.working.domain.StageInput;
 
 
+/**
+ * Primary configuration data class acting as the Single Point of Truth
+ * for recipe parameters and laboratory boundary configurations.
+ * <p>
+ * This class models raw user formulas (flour blend fractions, moisture, salt, lipids)
+ * and calculates composite reological indices internally, curing previous architectural
+ * Data Envy symptoms by isolating analytical dot-product computations from execution loops.
+ * </p>
+ */
 public class SimulationInputs{
 
 	private final BakeryProduct targetProduct = BakeryProduct.GASTRONOMY_PAN_PIZZA;
@@ -25,6 +34,14 @@ public class SimulationInputs{
 	private final double doughWater = 0.615;
 	private final double doughSalt = 0.022;
 	private final double doughOil = 0.039;
+	/**
+	 * Moisture of the yeast [g_water / g_wet_yeast]:
+	 * 	<ul>
+	 * 		<li>≈ 0.04–0.06 — instant/rapid dry yeast (IDY/SDY)</li>
+	 * 		<li>≈ 0.07–0.09 — active dry yeast (ADY)</li>
+	 * 		<li>≈ 0.68–0.72 — fresh compressed yeast (CY)</li>
+	 * 	</ul>
+	 */
 	private final double yeastMoisture = 0.70;
 	private final double flourTemperature = 19.;
 	private final double airRelativeHumidity = 0.54;
@@ -33,12 +50,28 @@ public class SimulationInputs{
 	private static final double IDEAL_HYDRATION_REFERENCE = 0.6;
 
 
+	/**
+	 * Returns the size of the combined flour botanical matrix array.
+	 *
+	 * @return	Count of distinct flour fractions used in the formula.
+	 */
 	public int getFlourCount(){
 		return fractions.length;
 	}
 
+	/**
+	 * Returns the selected target structural baking profile.
+	 *
+	 * @return	The BakeryProduct configuration profile.
+	 */
 	public BakeryProduct getTargetProduct() { return targetProduct; }
 
+	/**
+	 * Computes a mathematically normalized array of flour mass fractions.
+	 * Guarantees that the aggregated weights sum up to exactly 1.0.
+	 *
+	 * @return	A new normalized double array representing real flour distribution fractions.
+	 */
 	public double[] getFractions(){
 		final int flours = fractions.length;
 		double sumFractions = 0.;
@@ -51,8 +84,11 @@ public class SimulationInputs{
 	}
 
 	/**
-	 * Computes the complete, water-adjusted structural stiffness base index.
-	 * Resolves previous architectural Data Envy leakages.
+	 * Blends multi-varietal botanical metrics and scales them against dynamic water absorption properties.
+	 * Cures previous architectural Data Envy symptoms.
+	 *
+	 * @param flourMoisture	Total combined initial equilibrium moisture computed via GAB isotherms.
+	 * @return	The net water-adjusted initial viscoelastic matrix stiffness index.
 	 */
 	public double getHydratedStiffnessIndex(final double flourMoisture){
 		double dotStrength = 0.;
@@ -75,14 +111,20 @@ public class SimulationInputs{
 			dotγ += γ_i * f;
 		}
 
+		// Balanced visco-elastic index formulation preventing over-exponentiation on high protein flours
 		final double rawStiffnessBase = (dotStrength / dotPL) * (dotProtein / (1. + 2. * dotFiber + 5. * dotAsh)) * dotγ;
 
-		// Viscoelastic hydration modifier logic integrated here
+		// Polynomial water fluidization mapping curve
 		final double waterEff = (doughWater + flourMoisture) / (1. - flourMoisture);
 		final double structuralHydrationModifier = 1. + Math.pow(waterEff - IDEAL_HYDRATION_REFERENCE, 2);
 		return rawStiffnessBase / structuralHydrationModifier;
 	}
 
+	/**
+	 * Computes the aggregated starting simple sugar mass fraction pool by blending flour matrices.
+	 *
+	 * @return	Blended double value representing initial native simple sugars.
+	 */
 	public double getBlendedSugar(){
 		double dotSugar = 0.;
 		final double[] normalizedFractions = getFractions();

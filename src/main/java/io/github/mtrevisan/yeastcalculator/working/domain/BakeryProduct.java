@@ -1,6 +1,15 @@
 package io.github.mtrevisan.yeastcalculator.working.domain;
 
 
+/**
+ * Defines the rheological targets, biochemical boundaries, and optimization penalty scales
+ * specific to different core categories of baked goods.
+ * <p>
+ * Each product profile maps to a precise physical strategy, defining how far the gluten matrix
+ * can safely stretch (volume limit) and how much residual carbohydrate substrate must be
+ * preserved (sugar threshold) to feed the final baking phase and Maillard reaction.
+ * </p>
+ */
 public enum BakeryProduct{
 	/**
 	 * NEAPOLITAN_PIZZA:
@@ -8,14 +17,14 @@ public enum BakeryProduct{
 	 * Lower sugar threshold because extreme baking temperatures (450 °C+)
 	 * will cause flash charring if residual sugars are too high.
 	 */
-	NEAPOLITAN_PIZZA(1.7, 0.009, 25.0, 30.),
+	NEAPOLITAN_PIZZA(1.7, 0.009, 25., 30.),
 
 	/**
 	 * PAN_PIZZA_ROMAN:
 	 * High hydration, large open alveoli. Maximum volume ceiling.
 	 * Medium-high sugar required to sustain longer baking charts at 250 °C.
 	 */
-	ROMAN_PAN_PIZZA(2.2, 0.013, 15.0, 45.0),
+	ROMAN_PAN_PIZZA(2.2, 0.013, 15., 45.),
 
 	/**
 	 * GASTRONOMY_TEGLIA:
@@ -23,7 +32,7 @@ public enum BakeryProduct{
 	 * Controlled volume cap to prevent cell walls from thinning and merging into caves.
 	 * High sugar residue target (1.5%) to feed the crumb during very long, gentle bake profiles (220 °C).
 	 */
-	GASTRONOMY_PAN_PIZZA(2.0, 0.015, 20., 50.),
+	GASTRONOMY_PAN_PIZZA(2., 0.015, 20., 50.),
 
 	/**
 	 * BREAD:
