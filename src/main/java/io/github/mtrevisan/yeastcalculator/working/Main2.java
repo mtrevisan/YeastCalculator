@@ -60,12 +60,12 @@ public final class Main2{
 		final double oilK = (1.0 + 5.0 * in.getDoughOil()) * Math.exp(-8.0 * in.getDoughOil());
 
 		// 4. Extract Stages
-		final double[][] stages = Arrays.stream(in.getStagesRaw())
+		final double[][] stages = Arrays.stream(in.getStages())
 			.filter(r -> r.length >= 3 && r[2] > 0)
 			.toArray(double[][]::new);
 
 		final double totalDurationHours = Arrays.stream(stages).mapToDouble(r -> r[2]).sum();
-		final double[] folds = (in.getFoldsRaw() == null) ? new double[0] : in.getFoldsRaw();
+		final double[] folds = (in.getFolds() == null) ? new double[0] : in.getFolds();
 
 		// 5. Target Objective Function
 		final UnivariateFunction targetFunction = new UnivariateFunction(){

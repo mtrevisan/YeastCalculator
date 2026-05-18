@@ -2,7 +2,8 @@ package io.github.mtrevisan.yeastcalculator.working;
 
 
 public class SimulationInputs{
-	private double[] fractionsRaw = {0.70, 0.20, 0.10};
+
+	private double[] fractions = {0.70, 0.20, 0.10};
 
 	private Object[][] flourMatrix = {
 		// W,		P/L,	Sugar,	Prot,	Fat,		Fiber,	Ashes,	Type
@@ -11,14 +12,14 @@ public class SimulationInputs{
 		{110.,	0.40,	0.030,	0.10,	0.020,	0.06,		0.015,	"rye"}
 	};
 
-	private double[][] stagesRaw = {
+	private double[][] stages = {
 		// Temp,	RH,	Duration
 		{24.,		0.75,	2.},
 		{28.,		0.80,	3.5},
 		{4.,		0.70,	12.}
 	};
 
-	private double[] foldsRaw = {1.2, 2.5};
+	private double[] folds = {1.2, 2.5};
 
 	private double doughWater = 0.65;
 	private double doughSalt = 0.02;
@@ -30,17 +31,17 @@ public class SimulationInputs{
 
 
 	int getFlourCount(){
-		return fractionsRaw.length;
+		return fractions.length;
 	}
 
 	double[] getFractions(){
-		final int flours = fractionsRaw.length;
+		final int flours = fractions.length;
 		double sumFractions = 0.;
-		for(final double f : fractionsRaw)
+		for(final double f : fractions)
 			sumFractions += f;
 		final double[] fractions = new double[flours];
 		for(int i = 0; i < flours; i ++)
-			fractions[i] = fractionsRaw[i] / sumFractions;
+			fractions[i] = this.fractions[i] / sumFractions;
 		return fractions;
 	}
 
@@ -60,12 +61,12 @@ public class SimulationInputs{
 		return doughOil;
 	}
 
-	public double[][] getStagesRaw(){
-		return stagesRaw;
+	public double[][] getStages(){
+		return stages;
 	}
 
-	public double[] getFoldsRaw(){
-		return foldsRaw;
+	public double[] getFolds(){
+		return folds;
 	}
 
 	public double getYeastMoisture(){
