@@ -45,39 +45,39 @@ public class SimulationInputs{
 		return fractions;
 	}
 
-	public double getDoughWater(){
+	double getDoughWater(){
 		return doughWater;
 	}
 
-	public Object[][] getFlourMatrix(){
+	Object[][] getFlourMatrix(){
 		return flourMatrix;
 	}
 
-	public double getDoughSalt(){
+	double getDoughSalt(){
 		return doughSalt;
 	}
 
-	public double getDoughOil(){
+	double getDoughOil(){
 		return doughOil;
 	}
 
-	public double[][] getStages(){
+	double[][] getStages(){
 		return stages;
 	}
 
-	public double[] getFolds(){
+	double[] getFolds(){
 		return folds;
 	}
 
-	public double getYeastMoisture(){
+	double getYeastMoisture(){
 		return yeastMoisture;
 	}
 
-	public double getAirRelativeHumidity(){
+	double getAirRelativeHumidity(){
 		return airRelativeHumidity;
 	}
 
-	public double getFlourTemperature(){
+	double getFlourTemperature(){
 		return flourTemperature;
 	}
 

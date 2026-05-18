@@ -28,15 +28,13 @@ final class YeastFermentationModel{
 	 * Evaluates the thermal scaling factor [0., 1.] for yeast metabolic activity.
 	 */
 	static double calculateThermalEfficiency(final double temperature){
-		if(temperature <= TEMP_MIN || temperature >= TEMP_MAX){
+		if(temperature <= TEMP_MIN || temperature >= TEMP_MAX)
 			return 0.;
-		}
 
 		final double numerator = (temperature - TEMP_MAX) * Math.pow(temperature - TEMP_MIN, 2);
 		final double denominator = (TEMP_OPT - TEMP_MIN)
 			* ((TEMP_OPT - TEMP_MIN) * (temperature - TEMP_OPT)
 			- (TEMP_OPT - TEMP_MAX) * (TEMP_OPT + TEMP_MIN - 2. * temperature));
-
 		return numerator / denominator;
 	}
 
@@ -44,34 +42,30 @@ final class YeastFermentationModel{
 	 * Calculates the specific biological growth/fermentation rate (muBio) based on
 	 * cell concentration, enzyme activation state (lag), substrate availability, and biochemical inhibitors.
 	 */
-	public static double calculateBiomassGrowthRate(final double yDry, final double alphaBio,
-		final double lagPrev, final double sugarPrev,
-		final double saltK, final double oilK){
+	public static double calculateBiomassGrowthRate(final double yeast, final double alphaBio,
+			final double lag, final double sugar, final double saltK, final double oilK){
 		// Substrate-limiting Monod kinetics parameter
-		final double sugarK = sugarPrev / (sugarPrev + SUGAR_AFFINITY_K);
-
+		final double sugarK = sugar / (sugar + SUGAR_AFFINITY_K);
 		// Sigmoidal lag phase transition factor representing enzyme adjustment
-		final double lagTransition = 1. / (1. + Math.exp(-4. * (lagPrev - 0.5)));
-
-		return POTENTIAL_MU_MAX * yDry * alphaBio * saltK * oilK * sugarK * lagTransition;
+		final double lagTransition = 1. / (1. + Math.exp(-4. * (lag - 0.5)));
+		return POTENTIAL_MU_MAX * yeast * alphaBio * saltK * oilK * sugarK * lagTransition;
 	}
 
 	/**
 	 * Calculates the net sugar rate (dSugar/dt).
 	 * Accounts for concurrent enzymatic starch breakdown (generation) and yeast metabolism (consumption).
 	 */
-	static double calculateNetSugarRate(final double sugarCurr, final double muBio, final double yDry, final double tCurr){
-		if(sugarCurr <= 0.0 && muBio <= 0.0){
-			return 0.0;
-		}
+	static double calculateNetSugarRate(final double sugar, final double muBio, final double yeas,
+			final double temperature){
+		if(sugar <= 0. && muBio <= 0.)
+			return 0.;
 
 		// Arrhenius-like activation for flour amylase activity based on temperature
-		final double amylaseThermalK = Math.exp(0.06 * (tCurr - 20.0)) * (1.0 - 0.005 * Math.pow(tCurr - 35.0, 2));
-		final double sugarGeneration = AMYLASE_VMAX_BASE * Math.max(0.0, amylaseThermalK);
-
+		final double amylaseThermalK = Math.exp(0.06 * (temperature - 20.))
+			* (1. - 0.005 * Math.pow(temperature - 35., 2));
+		final double sugarGeneration = AMYLASE_VMAX_BASE * StrictMath.max(0., amylaseThermalK);
 		// Total metabolic uptake (Growth requirements + cellular maintenance)
-		final double sugarConsumption = (muBio * YEAST_SUGAR_YIELD_Y) + (yDry * MAINTENANCE_COEFF_M);
-
+		final double sugarConsumption = muBio * YEAST_SUGAR_YIELD_Y + yeas * MAINTENANCE_COEFF_M;
 		return sugarGeneration - sugarConsumption;
 	}
 

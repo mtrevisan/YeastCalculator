@@ -21,7 +21,7 @@ public final class Main2{
 		final double[] fractions = in.getFractions();
 
 		// 1. GAB Moisture Modeling
-		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(in, fractions);
+		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(in);
 		final double flourMoisture = gab.flourActiveWater + gab.flourStrictlyBoundWater;
 		final double totalWaterContent = (in.getDoughWater() + flourMoisture) / (1.0 + in.getDoughWater());
 

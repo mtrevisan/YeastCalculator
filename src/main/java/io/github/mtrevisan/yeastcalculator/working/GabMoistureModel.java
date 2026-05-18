@@ -1,5 +1,6 @@
 package io.github.mtrevisan.yeastcalculator.working;
 
+
 final class GabMoistureModel{
 
 	static final class GabResult{
@@ -15,15 +16,18 @@ final class GabMoistureModel{
 
 	private GabMoistureModel(){}
 
-	static GabResult calculateMoisture(final SimulationInputs in, final double[] fractions){
+
+	static GabResult calculateMoisture(final SimulationInputs in){
+		final double[] fractions = in.getFractions();
+
 		double mixTotalDB = 0.;
 		double mixBoundDB = 0.;
 
-		final double aw = StrictMath.max(StrictMath.min(in.getAirRelativeHumidity(), 0.95), 0.1);
+		final double aw = clamp(in.getAirRelativeHumidity(), 0.1, 0.95);
 		final double temperatureCoeff = 1. - 0.0025 * (in.getFlourTemperature() - 20.);
 		final Object[][] matrix = in.getFlourMatrix();
 
-		for(int i = 0; i < fractions.length; i++){
+		for(int i = 0; i < fractions.length; i ++){
 			final double protein = ((Number)matrix[i][3]).doubleValue();
 			final double fiber = ((Number)matrix[i][6]).doubleValue();
 			final String type = (String)matrix[i][7];
@@ -33,8 +37,7 @@ final class GabMoistureModel{
 			final double wmDb = props.wmBase + 0.085 * protein + 0.12 * fiber;
 			final double uEquilibriumDB = (wmDb * props.cGab * props.kGab * aw)
 				/ ((1. - props.kGab * aw) * (1. - props.kGab * aw + props.cGab * props.kGab * aw));
-
-			final double uTotalDB = StrictMath.max(StrictMath.min(uEquilibriumDB * temperatureCoeff, 0.2), 0.08);
+			final double uTotalDB = clamp(uEquilibriumDB * temperatureCoeff, 0.08, 0.2);
 
 			mixTotalDB += uTotalDB * fractions[i];
 			mixBoundDB += wmDb * fractions[i];
@@ -44,6 +47,10 @@ final class GabMoistureModel{
 		final double flourStrictlyBoundWater = mixBoundDB / (1. + mixBoundDB);
 
 		return new GabResult(flourStrictlyBoundWater, moistureTotal - flourStrictlyBoundWater);
+	}
+
+	private static double clamp(final double x, final double min, final double max){
+		return StrictMath.max(StrictMath.min(x, min), max);
 	}
 
 }
