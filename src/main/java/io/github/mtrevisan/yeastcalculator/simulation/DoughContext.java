@@ -1,6 +1,6 @@
-package io.github.mtrevisan.yeastcalculator.working.simulation;
+package io.github.mtrevisan.yeastcalculator.simulation;
 
-import io.github.mtrevisan.yeastcalculator.working.domain.StageInput;
+import io.github.mtrevisan.yeastcalculator.domain.StageInput;
 
 import java.util.Objects;
 

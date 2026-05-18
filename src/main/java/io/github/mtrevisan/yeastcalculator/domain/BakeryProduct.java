@@ -1,4 +1,4 @@
-package io.github.mtrevisan.yeastcalculator.working.domain;
+package io.github.mtrevisan.yeastcalculator.domain;
 
 
 /**
@@ -13,7 +13,7 @@ package io.github.mtrevisan.yeastcalculator.working.domain;
 public enum BakeryProduct{
 	/**
 	 * NEAPOLITAN_PIZZA:
-	 * Low volume in tray to preserve extensibility for manual stretching.
+	 * Low volume in the tray to preserve extensibility for manual stretching.
 	 * Lower sugar threshold because extreme baking temperatures (450 °C+)
 	 * will cause flash charring if residual sugars are too high.
 	 */
@@ -28,9 +28,9 @@ public enum BakeryProduct{
 
 	/**
 	 * GASTRONOMY_TEGLIA:
-	 * Spongy, soft, high thickness crumb with small, uniform, dense bubble structures.
+	 * Spongy, soft, high-thickness crumb with small, uniform, dense bubble structures.
 	 * Controlled volume cap to prevent cell walls from thinning and merging into caves.
-	 * High sugar residue target (1.5%) to feed the crumb during very long, gentle bake profiles (220 °C).
+	 * High-sugar residue target (1.5%) to feed the crumb during very long, gentle bake profiles (220 °C).
 	 */
 	GASTRONOMY_PAN_PIZZA(2., 0.015, 20., 50.),
 

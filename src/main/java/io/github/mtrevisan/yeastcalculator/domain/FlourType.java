@@ -1,4 +1,4 @@
-package io.github.mtrevisan.yeastcalculator.working.domain;
+package io.github.mtrevisan.yeastcalculator.domain;
 
 
 public enum FlourType{

@@ -1,6 +1,6 @@
-package io.github.mtrevisan.yeastcalculator.working.domain;
+package io.github.mtrevisan.yeastcalculator.domain;
 
-import io.github.mtrevisan.yeastcalculator.working.optimization.SimulationInputs;
+import io.github.mtrevisan.yeastcalculator.optimization.SimulationInputs;
 
 
 public final class GabMoistureModel{

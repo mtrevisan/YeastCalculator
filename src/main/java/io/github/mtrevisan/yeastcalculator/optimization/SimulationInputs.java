@@ -1,9 +1,9 @@
-package io.github.mtrevisan.yeastcalculator.working.optimization;
+package io.github.mtrevisan.yeastcalculator.optimization;
 
-import io.github.mtrevisan.yeastcalculator.working.domain.BakeryProduct;
-import io.github.mtrevisan.yeastcalculator.working.domain.FlourInput;
-import io.github.mtrevisan.yeastcalculator.working.domain.FlourType;
-import io.github.mtrevisan.yeastcalculator.working.domain.StageInput;
+import io.github.mtrevisan.yeastcalculator.domain.BakeryProduct;
+import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
+import io.github.mtrevisan.yeastcalculator.domain.FlourType;
+import io.github.mtrevisan.yeastcalculator.domain.StageInput;
 
 
 /**
@@ -11,13 +11,19 @@ import io.github.mtrevisan.yeastcalculator.working.domain.StageInput;
  * for recipe parameters and laboratory boundary configurations.
  * <p>
  * This class models raw user formulas (flour blend fractions, moisture, salt, lipids)
- * and calculates composite reological indices internally, curing previous architectural
+ * and calculates composite rheological indices internally, curing previous architectural
  * Data Envy symptoms by isolating analytical dot-product computations from execution loops.
  * </p>
  */
 public class SimulationInputs{
 
 	private final BakeryProduct targetProduct = BakeryProduct.GASTRONOMY_PAN_PIZZA;
+
+	// Total weight of the dough block
+	private final double doughMass = 0.250;
+
+	// Pre-soak duration in warm water [hours]
+	private final double yeastRehydrationDuration = 0.25;
 
 	private final double[] fractions = {1.};
 
@@ -26,7 +32,7 @@ public class SimulationInputs{
 	};
 
 	private final StageInput[] stages = {
-		new StageInput(26., 0.55, 8.)
+		new StageInput(26., 0.55, 9.)
 	};
 
 	private final double[] folds = {};
@@ -49,6 +55,10 @@ public class SimulationInputs{
 	// Rheological empirical constant reference
 	private static final double IDEAL_HYDRATION_REFERENCE = 0.6;
 
+
+	public double getDoughMass() { return doughMass; }
+
+	public double getYeastRehydrationDuration() { return yeastRehydrationDuration; }
 
 	/**
 	 * Returns the size of the combined flour botanical matrix array.
@@ -111,7 +121,7 @@ public class SimulationInputs{
 			dotγ += γ_i * f;
 		}
 
-		// Balanced visco-elastic index formulation preventing over-exponentiation on high protein flours
+		// Balanced viscoelastic index formulation preventing over-exponentiation on high-protein flours
 		final double rawStiffnessBase = (dotStrength / dotPL) * (dotProtein / (1. + 2. * dotFiber + 5. * dotAsh)) * dotγ;
 
 		// Polynomial water fluidization mapping curve

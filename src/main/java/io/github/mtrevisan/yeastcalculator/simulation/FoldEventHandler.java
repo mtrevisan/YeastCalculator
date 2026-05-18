@@ -1,4 +1,4 @@
-package io.github.mtrevisan.yeastcalculator.working.simulation;
+package io.github.mtrevisan.yeastcalculator.simulation;
 
 import org.apache.commons.math3.ode.events.EventHandler;
 
@@ -64,7 +64,7 @@ public final class FoldEventHandler implements EventHandler{
 	 */
 	@Override
 	public void resetState(final double t, final double[] y){
-		// Physical Degassing: Gas bubbles are mechanical crushed out of existence (V -> 1.)
+		// Physical Degassing: Gas bubbles are mechanically crushed out of existence (V -> 1.)
 		final double vGenerated = y[0];
 		// Physical Degassing: 85% of accumulated gas pockets are crushed out of the dough matrix
 		y[0] = 1. + (vGenerated - 1.) * 0.15;
