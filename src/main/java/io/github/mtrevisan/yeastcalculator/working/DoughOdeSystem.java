@@ -12,8 +12,6 @@ final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	private final double oilK;
 	private final double waterContent;
 
-	// Henry's Law Constant for CO2 in water at 25°C (mol / m^3 * Pa) converted to mass ratios
-	private static final double HENRY_CONSTANT_CO2 = 0.034;
 	// Critical saturation threshold before gas bubbles physically nucleate
 	private static final double CO2_SATURATION_LIMIT = 0.0015;
 	// Critical volume expansion ratio where gluten membranes thin out and fail (rupture point)
@@ -21,7 +19,7 @@ final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 
 	DoughOdeSystem(final double yDry, final double[][] stages, final double stiffnessIndexBase,
-		final double saltK, final double oilK, final double waterContent){
+			final double saltK, final double oilK, final double waterContent){
 		this.yDry = yDry;
 		this.stages = stages;
 		this.stiffnessIndexBase = stiffnessIndexBase;
@@ -98,9 +96,8 @@ final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		}
 
 		// 6. Volumetric Work vs Viscous Rheological Resistance
-		if(gasDesorptionRate <= 0.){
+		if(gasDesorptionRate <= 0.)
 			yDot[0] = 0.; // No gas phase available to drive mechanical volume work
-		}
 		else{
 			// Internal mechanical gas pressure balanced against matrix structural viscosity
 			final double internalPressure = (gasDesorptionRate * 0.08206 * (tCurr + 273.15)) / StrictMath.max(0.1, vCurr - 1.);

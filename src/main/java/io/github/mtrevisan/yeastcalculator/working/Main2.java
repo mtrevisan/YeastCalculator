@@ -75,13 +75,15 @@ public final class Main2{
 		final UnivariateFunction targetFunction = new UnivariateFunction(){
 			@Override
 			public double value(double yDry){
-				final FirstOrderIntegrator integrator = new DormandPrince853Integrator(1e-6, totalDurationHours, 1e-6, 1e-6);
+				final FirstOrderIntegrator integrator = new DormandPrince853Integrator(1e-6, totalDurationHours,
+					1e-6, 1e-6);
 
-				if(folds.length > 0){
-					integrator.addEventHandler(new FoldEventHandler(folds), 0.01, 1e-4, 100);
-				}
+				if(folds.length > 0)
+					integrator.addEventHandler(new FoldEventHandler(folds), 0.01, 1e-4,
+						100);
 
-				final DoughOdeSystem ode = new DoughOdeSystem(yDry, stages, stiffnessIndexBase, saltK, oilK, totalWaterContent);
+				final DoughOdeSystem ode = new DoughOdeSystem(yDry, stages, stiffnessIndexBase, saltK, oilK,
+					totalWaterContent);
 
 				// Initial boundary conditions:
 				// Volume = 1., Lag = 0., Sugar = sugarInitial, Dissolved CO2 = 0.0

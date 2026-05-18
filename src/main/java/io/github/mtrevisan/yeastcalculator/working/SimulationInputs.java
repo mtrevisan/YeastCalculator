@@ -7,9 +7,9 @@ public class SimulationInputs{
 
 	// Matrix cleanly transformed into a strongly typed array of objects
 	private final FlourInput[] flourMatrix = {
-		new FlourInput(300., 0.55, 0.015, 0.13, 0.012, 0.02, 0.0055, "wheat"),
-		new FlourInput(220., 0.60, 0.010, 0.12, 0.015, 0.025, 0.0065, "wheat semolina fine"),
-		new FlourInput(110., 0.40, 0.030, 0.10, 0.020, 0.06, 0.015, "rye")
+		new FlourInput(300., 0.55, 0.015, 0.13, 0.012, 0.02, 0.0055, FlourType.WHEAT),
+		new FlourInput(220., 0.60, 0.010, 0.12, 0.015, 0.025, 0.0065, FlourType.WHEAT_SEMOLINA_FINE),
+		new FlourInput(110., 0.40, 0.030, 0.10, 0.020, 0.06, 0.015, FlourType.RYE)
 	};
 
 	private double[][] stages = {

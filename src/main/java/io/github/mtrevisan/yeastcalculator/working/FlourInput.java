@@ -6,11 +6,6 @@ import java.util.List;
 
 public final class FlourInput{
 
-	// Static registry data hidden inside the domain entity
-	private static final List<String> REGISTRY_TYPES = Arrays.asList(
-		"wheat", "wheat semolina", "wheat semolina fine", "durum wheat", "durum wheat semolina",
-		"durum wheat semolina fine", "rye", "einkorn", "emmer", "spelt", "buckwheat", "barley", "chestnut"
-	);
 	private static final double[] WM_BASE_LOOKUP = {0.062, 0.06, 0.061, 0.063, 0.062, 0.062, 0.071, 0.064, 0.065, 0.063, 0.055, 0.068, 0.05};
 	private static final double[] C_GAB_LOOKUP = {12.5, 11.8, 12.1, 13.2, 12.6, 12.8, 8.4, 13., 12.4, 11.9, 6.2, 9.5, 4.8};
 	private static final double[] K_GAB_LOOKUP = {0.78, 0.79, 0.78, 0.76, 0.77, 0.77, 0.82, 0.75, 0.77, 0.79, 0.85, 0.81, 0.88};
@@ -24,7 +19,7 @@ public final class FlourInput{
 	private final double fat;
 	private final double fiber;
 	private final double ash;
-	private final String type;
+	private final FlourType type;
 
 	// Auto-resolved botanical constants
 	private final double wmBase;
@@ -33,8 +28,8 @@ public final class FlourInput{
 	private final double baseLookup;
 
 
-	public FlourInput(double strengthW, double plRatio, double sugar, double protein,
-		double fat, double fiber, double ash, String type){
+	public FlourInput(final double strengthW, final double plRatio, final double sugar, final double protein,
+			final double fat, final double fiber, final double ash, final FlourType type){
 		this.strengthW = strengthW;
 		this.plRatio = plRatio;
 		this.sugar = sugar;
@@ -45,7 +40,7 @@ public final class FlourInput{
 		this.type = type;
 
 		// Automatically resolve static properties on instantiation
-		final int idx = REGISTRY_TYPES.indexOf(type);
+		final int idx = type.ordinal();
 		this.wmBase = WM_BASE_LOOKUP[idx];
 		this.cGab = C_GAB_LOOKUP[idx];
 		this.kGab = K_GAB_LOOKUP[idx];
@@ -82,7 +77,7 @@ public final class FlourInput{
 		return ash;
 	}
 
-	String getType(){
+	FlourType getType(){
 		return type;
 	}
 
