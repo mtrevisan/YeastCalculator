@@ -1,11 +1,14 @@
 package io.github.mtrevisan.yeastcalculator.working.optimization;
 
+import io.github.mtrevisan.yeastcalculator.working.domain.BakeryProduct;
 import io.github.mtrevisan.yeastcalculator.working.domain.FlourInput;
 import io.github.mtrevisan.yeastcalculator.working.domain.FlourType;
 import io.github.mtrevisan.yeastcalculator.working.domain.StageInput;
 
 
 public class SimulationInputs{
+
+	private final BakeryProduct targetProduct = BakeryProduct.GASTRONOMY_PAN_PIZZA;
 
 	private final double[] fractions = {1.};
 
@@ -14,7 +17,7 @@ public class SimulationInputs{
 	};
 
 	private final StageInput[] stages = {
-		new StageInput(26., 0.55, 2.)
+		new StageInput(26., 0.55, 8.)
 	};
 
 	private final double[] folds = {};
@@ -33,6 +36,8 @@ public class SimulationInputs{
 	public int getFlourCount(){
 		return fractions.length;
 	}
+
+	public BakeryProduct getTargetProduct() { return targetProduct; }
 
 	public double[] getFractions(){
 		final int flours = fractions.length;

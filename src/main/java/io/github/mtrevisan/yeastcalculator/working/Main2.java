@@ -2,6 +2,7 @@ package io.github.mtrevisan.yeastcalculator.working;
 
 import java.util.Arrays;
 
+import io.github.mtrevisan.yeastcalculator.working.domain.BakeryProduct;
 import io.github.mtrevisan.yeastcalculator.working.domain.GabMoistureModel;
 import io.github.mtrevisan.yeastcalculator.working.domain.StageInput;
 import io.github.mtrevisan.yeastcalculator.working.domain.YeastFermentationModel;
@@ -26,8 +27,6 @@ import org.apache.commons.math3.ode.sampling.StepInterpolator;
 public final class Main2{
 
 	private static final double SUGAR_SCORE_MULTIPLIER = 5.0;
-	private static final double GLUTEN_TEARING_LIMIT = 2.2;
-	private static final double TEARING_PENALTY_MULTIPLIER = 15.0;
 	private static final double YEAST_ABUSE_PENALTY_MULTIPLIER = 8.0;
 	private static final double AMYLASE_ACCESSIBLE_SUGAR_OFFSET = 0.01;
 	private static final double MAX_SAFE_DRY_YEAST_LIMIT = 0.015;
@@ -66,8 +65,8 @@ public final class Main2{
 		final SimulationInputs inputs = new SimulationInputs();
 		final SimulationResult result = calculateOptimalYeast(inputs);
 
-		System.out.printf("Optimal Yeast [%%]:   %.6f%n", result.optimalYeast());
-		System.out.printf("Peak Volume Ratio:   %.4f%n", result.peakVolume());
+		System.out.printf("Optimal Yeast [%%]:   %.4f%n", result.optimalYeast());
+		System.out.printf("Peak Volume Ratio:   %.1f%n", result.peakVolume());
 		System.out.printf("Remaining Sugar [%%]: %.4f%n", result.remainingSugar());
 	}
 
@@ -85,6 +84,7 @@ public final class Main2{
 		final double[] folds = (in.getFolds() == null? new double[0]: in.getFolds());
 
 		final double sugarInitial = in.getBlendedSugar() + AMYLASE_ACCESSIBLE_SUGAR_OFFSET;
+		final BakeryProduct product = in.getTargetProduct();
 		final DoughContext context = DoughContext.create(
 			stages, folds, totalDuration,
 			in.getHydratedStiffnessIndex(flourMoisture),
@@ -98,12 +98,17 @@ public final class Main2{
 			final double peakVolume = metrics[0];
 			final double remainingSugar = metrics[1];
 
-			final double structuralTearingPenalty = (peakVolume > GLUTEN_TEARING_LIMIT
-				? (peakVolume - GLUTEN_TEARING_LIMIT) * TEARING_PENALTY_MULTIPLIER
+			final double structuralTearingPenalty = (peakVolume > product.getGlutenTearingLimit()
+				? (peakVolume - product.getGlutenTearingLimit()) * product.getTearingPenaltyMultiplier()
 				: 0.);
+
+			final double sugarStarvationPenalty = (remainingSugar < product.getMinSafeSugarThreshold()
+				? (product.getMinSafeSugarThreshold() - remainingSugar) * product.getStarvationPenaltyMultiplier()
+				: 0.);
+
 			final double yeastAbusePenalty = yDry * YEAST_ABUSE_PENALTY_MULTIPLIER;
 
-			return peakVolume + remainingSugar * SUGAR_SCORE_MULTIPLIER - structuralTearingPenalty - yeastAbusePenalty;
+			return peakVolume - structuralTearingPenalty - sugarStarvationPenalty - yeastAbusePenalty;
 		};
 
 		final double yDryOptimal = executeBrentOptimization(structuralObjectiveFunction);
@@ -125,9 +130,17 @@ public final class Main2{
 		final double[] metrics = {1., ctx.getSugarInitial()};
 		integrator.addStepHandler(new DoughMetricsTracker(metrics));
 
+		// Initial conditions setup for 6D state array
+		// y[0] = 1 (Initial Volume)
+		// y[1] = 0 (Initial Lag Phase tracking coordinate)
+		// y[2] = sugarInitial (Initial carbohydrate substrate pool)
+		// y[3] = 0 (Initial dissolved carbon dioxide concentration)
+		// y[4] = 0 (Initial macro-structural protein network degradation)
+		// y[5] = 0.001 (Atmospheric/equilibrium basal micro-bubble gas pressure reference)
+		final double[] y = {1., 0., ctx.getSugarInitial(), 0., 0., 0.001};
+
 		final DoughOdeSystem ode = new DoughOdeSystem(yDry, ctx.getStages(), ctx.getStiffness(), ctx.getSaltK(),
 			ctx.getOilK(), ctx.getWaterContent());
-		final double[] y = {1., 0., ctx.getSugarInitial(), 0.};
 		try{
 			integrator.integrate(ode, 0., y, ctx.getTotalDuration(), y);
 		}

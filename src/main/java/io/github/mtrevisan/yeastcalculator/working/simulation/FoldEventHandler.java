@@ -38,10 +38,14 @@ public final class FoldEventHandler implements EventHandler{
 	public void resetState(final double t, final double[] y){
 		// Physical Degassing: Gas bubbles are mechanical crushed out of existence (V -> 1.)
 		final double vGenerated = y[0];
-		y[0] = 1. + (vGenerated - 1.) * 0.15; // 85% of pocket gas is expelled
+		// 85% of pocket gas is expelled
+		y[0] = 1. + (vGenerated - 1.) * 0.15;
 
-		// Dissolved chemical CO2 in the water is unaffected by physical folding mechanics
-		// y[3] remains unchanged
+		// Internal trapped micro-bubble pressure does not instantly vanish to zero.
+		// Manipulation leaves an elastic residual stress footprint (~35% preserved energy)
+		y[5] = y[5] * 0.35;
+
+		// Sugar pools (y[2]), active dissolved CO2 (y[3]), and chemical degradation (y[4]) are untouched
 	}
 
 }

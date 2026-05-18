@@ -41,7 +41,8 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 	@Override
 	public int getDimension(){
-		return 4;
+		// y[0]=Volume, y[1]=Lag, y[2]=Sugar, y[3]=Dissolved CO2, y[4]=Gluten Degradation, y[5]=Internal Pressure
+		return 6;
 	}
 
 	@Override
@@ -50,6 +51,8 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		final double lagCurr = y[1];
 		final double sugarCurr = y[2];
 		final double co2Dissolved = y[3];
+		final double glutenDegradation = y[4];
+		final double internalPressure = y[5];
 
 		// 1. Resolve environmental boundaries
 		double stageStart = 0.;
@@ -65,18 +68,21 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 			stageStart += stageDuration;
 		}
 
-		// Clamped temperature evaluation for safety
 		final double tClamped = Math.clamp(tCurr, 4.0, 45.0);
 
 		// 2. Henry's law temperature adjustments
 		final double temperatureCorrection = Math.exp(2400. * (1. / (tClamped + TEMPERATURE_KELVIN_OFFSET) - 1. / 298.15));
 		final double dynamicSaturationLimit = CO2_SATURATION_LIMIT * temperatureCorrection * (1. + 0.5 * saltK);
 
-		// 3. Structural Stiffness relaxation
+		// 3. Structural Stiffness relaxation (Asymptotic Degradation ODE integration)
 		final double humidityDeficitFactor = Math.exp(-1.2 * (rhCurr - 1.0));
 		final double stiffnessTarget = stiffnessIndexBase * humidityDeficitFactor;
+
 		final double proteolysisRate = 0.0015 * Math.exp(0.08 * (tClamped - 20.));
-		final double dynamicStiffness = stiffnessTarget * Math.exp(-proteolysisRate * t);
+		// dDegradation/dt: tracks asymptotic protein structural decay pathway
+		yDot[4] = proteolysisRate * (1. - glutenDegradation);
+
+		final double dynamicStiffness = stiffnessTarget * (1. - glutenDegradation);
 
 		// 4. Biological Core Integration
 		final double alphaBio = YeastFermentationModel.calculateThermalEfficiency(tClamped);
@@ -98,14 +104,18 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 			gasDesorptionRate = 0.;
 		}
 
-		// 6. Volumetric Work vs Resistance
-		if(gasDesorptionRate <= 0.)
+		// 6. Volumetric Work vs Structural Resistance
+		final double netGasVolume = (vCurr - 1.) + INITIAL_GAS_POROSITY;
+
+		// Ideal equilibrium reference pressure calculation
+		final double equilibriumPressure = (gasDesorptionRate * GAS_CONSTANT_R * (tClamped + TEMPERATURE_KELVIN_OFFSET)) / netGasVolume;
+
+		// dPressure/dt: Dynamic mass relaxation toward target equilibrium pressure state
+		yDot[5] = 25. * (equilibriumPressure - internalPressure);
+
+		if (gasDesorptionRate <= 0. && internalPressure <= 0.)
 			yDot[0] = 0.;
 		else{
-			final double netGasVolume = (vCurr - 1.0) + INITIAL_GAS_POROSITY;
-			final double internalPressure = (gasDesorptionRate * GAS_CONSTANT_R * (tClamped + TEMPERATURE_KELVIN_OFFSET))
-				/ netGasVolume;
-
 			double matrixPermeabilityK = 1.;
 			if(vCurr > GLUTEN_POROSITY_THRESHOLD){
 				final double overstretch = vCurr - GLUTEN_POROSITY_THRESHOLD;
