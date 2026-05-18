@@ -26,7 +26,13 @@ public final class Main2{
 		final double totalWaterContent = (in.getDoughWater() + flourMoisture) / (1.0 + in.getDoughWater());
 
 		// 2. Weighted Flour Property Aggregation (Dot Product)
-		double dotStrength = 0, dotPL = 0, dotSugar = 0, dotProtein = 0, dotFiber = 0, dotAsh = 0, dotγ = 0;
+		double dotStrength = 0.;
+		double dotPL = 0.;
+		double dotSugar = 0.;
+		double dotProtein = 0.;
+		double dotFiber = 0.;
+		double dotAsh = 0.;
+		double dotγ = 0.;
 		final Object[][] matrix = in.getFlourMatrix();
 
 		for(int i = 0; i < flours; i++){
