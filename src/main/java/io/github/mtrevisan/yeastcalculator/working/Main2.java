@@ -1,43 +1,49 @@
 package io.github.mtrevisan.yeastcalculator.working;
 
 import java.util.Arrays;
-import java.util.stream.IntStream;
 
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.solvers.BisectionSolver;
+import org.apache.commons.math3.ode.FirstOrderIntegrator;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
 
 
 public final class Main2{
 
 	public static void main(final String[] args){
 		final SimulationInputs inputs = new SimulationInputs();
-		final double dt = 2. / 60.;
-		final double result = calculateOptimalYeast(inputs, dt);
+		final double result = calculateOptimalYeast(inputs);
 		System.out.printf("Optimal Commercial Yeast Quantity: %.6f%n", result);
 	}
 
-	public static double calculateOptimalYeast(final SimulationInputs in, final double dt){
+	public static double calculateOptimalYeast(final SimulationInputs in){
 		final int flours = in.getFlourCount();
 		final double[] fractions = in.getFractions();
 
-		// 2. GAB Moisture Modeling
+		// 1. GAB Moisture Modeling
 		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(in, fractions);
 		final double flourMoisture = gab.flourActiveWater + gab.flourStrictlyBoundWater;
 
-		// 3. Weighted Flour Property Aggregation (Dot Product)
-		double dotStrength = 0, dotPL = 0, dotSugar = 0, dotProtein = 0, dotFiber = 0, dotAsh = 0, dotγ = 0;
+		// 2. Weighted Flour Property Aggregation (Dot Product)
+		double dotStrength = 0.;
+		double dotPL = 0.;
+		double dotSugar = 0.;
+		double dotProtein = 0.;
+		double dotFiber = 0.;
+		double dotAsh = 0.;
+		double dotγ = 0.;
+		final Object[][] matrix = in.flourMatrix;
 
 		for(int i = 0; i < flours; i++){
-			final double strength = ((Number)in.flourMatrix[i][0]).doubleValue();
-			final double pl = ((Number)in.flourMatrix[i][1]).doubleValue();
-			final double sugar = ((Number)in.flourMatrix[i][2]).doubleValue();
-			final double protein = ((Number)in.flourMatrix[i][3]).doubleValue();
-			final double fats = ((Number)in.flourMatrix[i][4]).doubleValue();
-			final double fiber = ((Number)in.flourMatrix[i][5]).doubleValue();
-			final double ash = ((Number)in.flourMatrix[i][6]).doubleValue();
-			final String type = (String)in.flourMatrix[i][7];
+			final double strength = ((Number)matrix[i][0]).doubleValue();
+			final double pl = ((Number)matrix[i][1]).doubleValue();
+			final double sugar = ((Number)matrix[i][2]).doubleValue();
+			final double protein = ((Number)matrix[i][3]).doubleValue();
+			final double fats = ((Number)matrix[i][4]).doubleValue();
+			final double fiber = ((Number)matrix[i][5]).doubleValue();
+			final double ash = ((Number)matrix[i][6]).doubleValue();
+			final String type = (String)matrix[i][7];
 
-			// Isolated chemical lookup via domain registry
 			final FlourRegistry.FlourProperties props = FlourRegistry.resolveProperties(type);
 			final double γ_i = props.baseLookup * Math.exp(-2. * fats) * Math.exp(-0.5 * sugar);
 
@@ -50,7 +56,7 @@ public final class Main2{
 			dotγ += γ_i * fractions[i];
 		}
 
-		// 4. Bio-Mechanical Dough Environment Setup
+		// 3. Bio-Mechanical Dough Environment Setup
 		final double waterEff = (in.doughWater + flourMoisture) / (1. - flourMoisture);
 		final double stiffnessIndexBase = dotStrength * dotProtein / (dotPL * (1. + 2. * dotFiber + 5. * dotAsh)) * dotγ;
 		final double vTarget = 1. + 0.005 * stiffnessIndexBase / (1. + Math.pow(waterEff - 0.6, 2));
@@ -58,112 +64,49 @@ public final class Main2{
 		final double saltK = Math.exp(-15. * in.doughSalt);
 		final double oilK = (1. + 5. * in.doughOil) * Math.exp(-8. * in.doughOil);
 
-		// 5. Timeline Discretization & Stage Indexing
+		// 4. Extract Profiles and Total Fermentation Lifespan (T max)
 		final double[][] stages = Arrays.stream(in.stagesRaw)
 			.filter(r -> r.length >= 3 && r[2] > 0)
 			.toArray(double[][]::new);
 
-		final int[] stepsPerStage = Arrays.stream(stages)
-			.mapToInt(r -> (int)Math.ceil(r[2] / dt))
-			.toArray();
-
-		final int totalSteps = IntStream.of(stepsPerStage).sum();
-
-		final int[] stagesIdx = new int[totalSteps];
-		int currentStepGlobal = 0;
-		for(int s = 0; s < stages.length; s++){
-			for(int step = 0; step < stepsPerStage[s]; step++){
-				stagesIdx[currentStepGlobal] = s;
-				currentStepGlobal++;
-			}
-		}
-
+		final double totalDurationHours = Arrays.stream(stages).mapToDouble(r -> r[2]).sum();
 		final double[] folds = (in.foldsRaw == null) ? new double[0] : in.foldsRaw;
 
-		// 6. Root Finding via Apache Commons Bisection Solver
+		// 5. Target Objective Function for the Bisection Root Finder
+		final UnivariateFunction targetFunction = new UnivariateFunction(){
+			@Override
+			public double value(double yDry){
+				// Adaptive step-size integrator setup (Dormand-Prince 8(5,3))
+				final FirstOrderIntegrator integrator = new DormandPrince853Integrator(1e-6, totalDurationHours, 1e-6, 1e-6);
+
+				// Add discrete event handler interceptor for folds
+				if(folds.length > 0){
+					integrator.addEventHandler(new FoldEventHandler(folds), 0.01, 1e-4, 100);
+				}
+
+				final DoughOdeSystem ode = new DoughOdeSystem(yDry, stages, folds, stiffnessIndexBase, saltK, oilK);
+
+				// Initial boundary states at t = 0.
+				final double[] y = {1., 0., sugarInitial}; // Volume=1., Lag=0., Initial Sugar
+
+				// Solve the entire time profile analytically using dynamic adaptive steps
+				integrator.integrate(ode, 0., y, totalDurationHours, y);
+
+				// Return residual delta compared to target volume constraint
+				return y[0] - vTarget;
+			}
+		};
+
+		// 6. Solvers execution
 		final double lowerBound = 0.0001;
 		final double upperBound = 0.15;
 		final double absoluteAccuracy = 1e-7;
 		final int maxEvaluations = 100;
 
-		final UnivariateFunction targetFunction = new UnivariateFunction(){
-			@Override
-			public double value(double yDry){
-				return simulateVolume(yDry, totalSteps, dt, stagesIdx, stages, folds,
-					stiffnessIndexBase, sugarInitial, saltK, oilK) - vTarget;
-			}
-		};
-
 		final BisectionSolver solver = new BisectionSolver(absoluteAccuracy);
 		final double yDryOptimal = solver.solve(maxEvaluations, targetFunction, lowerBound, upperBound);
 
 		return yDryOptimal / (1. - in.yeastMoisture);
-	}
-
-	// --- CONTINUOUS TIME ITERATIVE FERMENTATION SIMULATION ---
-	private static double simulateVolume(final double yDry, final int totalSteps, final double dt,
-		final int[] stagesIdx, final double[][] stages, final double[] folds,
-		final double stiffnessIndexBase, final double sugarInitial, final double saltK, final double oilK){
-
-		double vPrev = 1.;
-		double stiffnessIndexPrev = stiffnessIndexBase;
-		double lagPrev = 0.;
-		double sugarPrev = sugarInitial;
-		double tPrev = 0.;
-
-		for(int step = 1; step <= totalSteps; step++){
-			final double tCurrTime = step * dt;
-			final int stageIdx = stagesIdx[step - 1];
-
-			final double tCurr = stages[stageIdx][0];
-			final double rhCurr = stages[stageIdx][1];
-
-			// 1. Structural Dough Mechanics (Folds & Rheology)
-			boolean isFoldStep = false;
-			for(final double fold : folds){
-				if(fold > tPrev && fold <= tCurrTime){
-					isFoldStep = true;
-					break;
-				}
-			}
-
-			final double stiffnessTarget = stiffnessIndexBase / ((rhCurr < 0.60) ? (0.50 + 0.50 * (rhCurr / 0.60)) : 1.);
-			final double proteolysisRate = 0.002 * Math.exp(0.07 * (tCurr - 20.));
-			final double stiffnessRelaxed = stiffnessTarget * Math.exp(-proteolysisRate * tCurrTime);
-
-			final double stiffnessIndexDynamic = (isFoldStep
-				? stiffnessIndexPrev * 1.35
-				: stiffnessRelaxed + (stiffnessIndexPrev - stiffnessRelaxed) * Math.exp(-1.8 * dt));
-
-			// 2. Microorganism Biology (Delegated to YeastFermentationModel)
-			final double alphaBio = YeastFermentationModel.calculateThermalEfficiency(tCurr);
-			final double lagNew = lagPrev + dt * alphaBio;
-
-			final double muBio = YeastFermentationModel.calculateBiomassGrowthRate(
-				yDry, alphaBio, lagPrev, sugarPrev, saltK, oilK
-			);
-			final double sugarNew = YeastFermentationModel.consumeSugar(sugarPrev, muBio, dt);
-
-			// 3. Bio-Mechanical Coupling (How yeast gas interacts with dough macrostructures)
-			final double muEff = muBio * stiffnessIndexBase / stiffnessIndexPrev;
-
-			final double pressureFactor = (vPrev - 1.) * stiffnessIndexDynamic / stiffnessIndexBase;
-			final double leakingCoeff = 1. / (1. + Math.exp(-12. * (pressureFactor - 1.8)));
-			final double leakingK = 1. - (leakingCoeff * 0.4);
-
-			// 4. Volume State Update
-			final double vGenerated = vPrev + muEff * vPrev * dt * leakingK;
-			final double vNew = isFoldStep ? (1. + (vGenerated - 1.) * 0.75) : vGenerated;
-
-			// State Migration for Next Iteration
-			vPrev = vNew;
-			stiffnessIndexPrev = stiffnessIndexDynamic;
-			lagPrev = lagNew;
-			sugarPrev = sugarNew;
-			tPrev = tCurrTime;
-		}
-
-		return vPrev;
 	}
 
 }
