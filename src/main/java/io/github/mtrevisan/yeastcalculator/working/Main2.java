@@ -23,7 +23,7 @@ public final class Main2{
 		// 1. GAB Moisture Modeling
 		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(in);
 		final double flourMoisture = gab.flourActiveWater + gab.flourStrictlyBoundWater;
-		final double totalWaterContent = (in.getDoughWater() + flourMoisture) / (1.0 + in.getDoughWater());
+		final double totalWaterContent = (in.getDoughWater() + flourMoisture) / (1. + in.getDoughWater());
 
 		// 2. Weighted Flour Property Aggregation (Dot Product)
 		double dotStrength = 0.;
@@ -43,10 +43,8 @@ public final class Main2{
 			final double fats = flour.getFat();
 			final double fiber = flour.getFiber();
 			final double ash = flour.getAsh();
-			final String type = flour.getType();
-
-			final FlourRegistry.FlourProperties props = FlourRegistry.resolveProperties(type);
-			final double γ_i = props.baseLookup * Math.exp(-2.0 * fats) * Math.exp(-0.5 * sugar);
+			final double baseLookup = flour.getBaseLookup();
+			final double γ_i = baseLookup * Math.exp(-2. * fats) * Math.exp(-0.5 * sugar);
 
 			dotStrength += strength * fractions[i];
 			dotPL += pl * fractions[i];
@@ -58,12 +56,12 @@ public final class Main2{
 		}
 
 		// 3. Bio-Mechanical Dough Environment Setup
-		final double waterEff = (in.getDoughWater() + flourMoisture) / (1.0 - flourMoisture);
-		final double stiffnessIndexBase = dotStrength * dotProtein / (dotPL * (1.0 + 2.0 * dotFiber + 5.0 * dotAsh)) * dotγ;
-		final double vTarget = 1.0 + 0.005 * stiffnessIndexBase / (1.0 + Math.pow(waterEff - 0.6, 2));
+		final double waterEff = (in.getDoughWater() + flourMoisture) / (1. - flourMoisture);
+		final double stiffnessIndexBase = dotStrength * dotProtein / (dotPL * (1. + 2. * dotFiber + 5. * dotAsh)) * dotγ;
+		final double vTarget = 1. + 0.005 * stiffnessIndexBase / (1. + Math.pow(waterEff - 0.6, 2));
 		final double sugarInitial = dotSugar + 0.01;
-		final double saltK = Math.exp(-15.0 * in.getDoughSalt());
-		final double oilK = (1.0 + 5.0 * in.getDoughOil()) * Math.exp(-8.0 * in.getDoughOil());
+		final double saltK = Math.exp(-15. * in.getDoughSalt());
+		final double oilK = (1. + 5. * in.getDoughOil()) * Math.exp(-8. * in.getDoughOil());
 
 		// 4. Extract Stages
 		final double[][] stages = Arrays.stream(in.getStages())
@@ -86,10 +84,10 @@ public final class Main2{
 				final DoughOdeSystem ode = new DoughOdeSystem(yDry, stages, stiffnessIndexBase, saltK, oilK, totalWaterContent);
 
 				// Initial boundary conditions:
-				// Volume = 1.0, Lag = 0.0, Sugar = sugarInitial, Dissolved CO2 = 0.0
-				final double[] y = {1.0, 0.0, sugarInitial, 0.0};
+				// Volume = 1., Lag = 0., Sugar = sugarInitial, Dissolved CO2 = 0.0
+				final double[] y = {1., 0., sugarInitial, 0.};
 
-				integrator.integrate(ode, 0.0, y, totalDurationHours, y);
+				integrator.integrate(ode, 0., y, totalDurationHours, y);
 				return y[0] - vTarget;
 			}
 		};
@@ -103,7 +101,7 @@ public final class Main2{
 		final BisectionSolver solver = new BisectionSolver(absoluteAccuracy);
 		final double yDryOptimal = solver.solve(maxEvaluations, targetFunction, lowerBound, upperBound);
 
-		return yDryOptimal / (1.0 - in.getYeastMoisture());
+		return yDryOptimal / (1. - in.getYeastMoisture());
 	}
 
 }

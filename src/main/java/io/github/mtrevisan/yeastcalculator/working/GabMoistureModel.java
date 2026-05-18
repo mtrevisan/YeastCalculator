@@ -31,13 +31,13 @@ final class GabMoistureModel{
 			final FlourInput flour = matrix[i];
 			final double protein = flour.getProtein();
 			final double fiber = flour.getFiber();
-			final String type = flour.getType();
+			final double wmBase = flour.getWmBase();
+			final double cGab = flour.getCGab();
+			final double kGab = flour.getKGab();
 
-			final FlourRegistry.FlourProperties props = FlourRegistry.resolveProperties(type);
-
-			final double wmDb = props.wmBase + 0.085 * protein + 0.12 * fiber;
-			final double uEquilibriumDB = (wmDb * props.cGab * props.kGab * aw)
-				/ ((1. - props.kGab * aw) * (1. - props.kGab * aw + props.cGab * props.kGab * aw));
+			final double wmDb = wmBase + 0.085 * protein + 0.12 * fiber;
+			final double uEquilibriumDB = (wmDb * cGab * kGab * aw)
+				/ ((1. - kGab * aw) * (1. - kGab * aw + cGab * kGab * aw));
 			final double uTotalDB = clamp(uEquilibriumDB * temperatureCoeff, 0.08, 0.2);
 
 			mixTotalDB += uTotalDB * fractions[i];
