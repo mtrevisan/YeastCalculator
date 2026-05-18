@@ -18,22 +18,33 @@ import org.apache.commons.math3.ode.sampling.StepInterpolator;
 
 public final class Main2{
 
-	// Data carrier to return both optimal yeast and the highest volume ratio achieved
 	public static final class SimulationResult{
 		private final double optimalYeast;
-		private final double maxVolumeRatio;
+		private final double peakVolume;
+		private final double remainingSugar;
+		private final double structuralTearingPenalty;
 
-		public SimulationResult(double optimalYeast, double maxVolumeRatio){
+		public SimulationResult(double optimalYeast, double peakVolume, double remainingSugar, double structuralTearingPenalty){
 			this.optimalYeast = optimalYeast;
-			this.maxVolumeRatio = maxVolumeRatio;
+			this.peakVolume = peakVolume;
+			this.remainingSugar = remainingSugar;
+			this.structuralTearingPenalty = structuralTearingPenalty;
 		}
 
 		public double getOptimalYeast(){
 			return optimalYeast;
 		}
 
-		public double getMaxVolumeRatio(){
-			return maxVolumeRatio;
+		public double getPeakVolume(){
+			return peakVolume;
+		}
+
+		public double getRemainingSugar(){
+			return remainingSugar;
+		}
+
+		public double getStructuralTearingPenalty(){
+			return structuralTearingPenalty;
 		}
 
 	}
@@ -41,11 +52,12 @@ public final class Main2{
 	public static void main(final String[] args){
 		final SimulationInputs inputs = new SimulationInputs();
 
-		// Execute calculation and fetch the combined data result
 		final SimulationResult result = calculateOptimalYeast(inputs);
 
-		System.out.printf("Optimal Commercial Yeast Quantity for MAX Volume: %.6f%n", result.getOptimalYeast());
-		System.out.printf("Max Volume / Initial Volume Ratio: %.2f%n", result.getMaxVolumeRatio());
+		System.out.printf("Optimal Commercial Yeast Quantity: %.6f%n", result.getOptimalYeast());
+		System.out.printf("Peak Volume Ratio (V_max / V_0):   %.4f%n", result.getPeakVolume());
+		System.out.printf("Remaining Sugar Substrate:          %.4f%n", result.getRemainingSugar());
+		System.out.printf("Structural Tearing Penalty Applied: %.4f%n", result.getStructuralTearingPenalty());
 	}
 
 	public static SimulationResult calculateOptimalYeast(final SimulationInputs in){
@@ -88,11 +100,7 @@ public final class Main2{
 		}
 
 		// 3. Bio-Mechanical Dough Environment Setup
-		// RESTORED: Calculating the effective hydration variable representing unbound fluid mechanics
 		final double waterEff = (in.getDoughWater() + flourMoisture) / (1. - flourMoisture);
-
-		// Adjusting the structural stiffness base index using the restored water efficiency factor
-		// Higher water deviations from the ideal 0.6 reference point soften the matrix structure
 		final double structuralHydrationModifier = 1. + Math.pow(waterEff - 0.6, 2);
 		final double stiffnessIndexBase = (dotStrength * dotProtein / (dotPL * (1. + 2. * dotFiber + 5. * dotAsh)) * dotγ) / structuralHydrationModifier;
 
@@ -106,56 +114,63 @@ public final class Main2{
 			.toArray(StageInput[]::new);
 
 		final double totalDuration = Arrays.stream(stages)
-			.mapToDouble(s -> s.getDuration())
+			.mapToDouble(StageInput::getDuration)
 			.sum();
 		final double[] folds = (in.getFolds() == null) ? new double[0] : in.getFolds();
 
-		// 5. Objective Function targeting peak volume reached at any point during the timeline
-		final UnivariateFunction volumeObjectiveFunction = new UnivariateFunction(){
-			@Override
-			public double value(double yDry){
-				final FirstOrderIntegrator integrator = new DormandPrince853Integrator(1e-6, totalDuration, 1e-6, 1e-6);
+		// 5. Objective Function targeting maximum structural efficiency
+		final UnivariateFunction structuralObjectiveFunction = yDry -> {
+			final FirstOrderIntegrator integrator = new DormandPrince853Integrator(1e-6, totalDuration, 1e-6, 1e-6);
 
-				if(folds.length > 0){
-					integrator.addEventHandler(new FoldEventHandler(folds), 0.01, 1e-4, 100);
-				}
-
-				// Container to track the maximum volume value encountered during simulation steps
-				final double[] peakVolumeContainer = {1.0};
-
-				integrator.addStepHandler(new StepHandler(){
-					@Override
-					public void init(double t0, double[] y0, double t){
-						peakVolumeContainer[0] = y0[0];
-					}
-
-					@Override
-					public void handleStep(StepInterpolator interpolator, boolean isLast){
-						double[] yInterp = interpolator.getInterpolatedState();
-						if(yInterp[0] > peakVolumeContainer[0]){
-							peakVolumeContainer[0] = yInterp[0];
-						}
-					}
-				});
-
-				final DoughOdeSystem ode = new DoughOdeSystem(yDry, stages, stiffnessIndexBase, saltK, oilK, totalWaterContent);
-
-				// Initial boundary conditions: Volume (y[0]) starts at 1.0
-				final double[] y = {1., 0., sugarInitial, 0.};
-
-				try{
-					integrator.integrate(ode, 0., y, totalDuration, y);
-				}
-				catch(Exception e){
-					return 1.0;
-				}
-
-				return peakVolumeContainer[0];
+			if(folds.length > 0){
+				integrator.addEventHandler(new FoldEventHandler(folds), 0.01, 1e-4, 100);
 			}
+
+			final double[] metrics = {1., sugarInitial};
+
+			integrator.addStepHandler(new StepHandler(){
+				@Override
+				public void init(double t0, double[] y0, double t){
+					metrics[0] = y0[0];
+					metrics[1] = y0[2];
+				}
+
+				@Override
+				public void handleStep(StepInterpolator interpolator, boolean isLast){
+					double[] yInterp = interpolator.getInterpolatedState();
+					if(yInterp[0] > metrics[0]){
+						metrics[0] = yInterp[0];
+					}
+					metrics[1] = yInterp[2];
+				}
+			});
+
+			final DoughOdeSystem ode = new DoughOdeSystem(yDry, stages, stiffnessIndexBase, saltK, oilK, totalWaterContent);
+			final double[] y = {1., 0., sugarInitial, 0.};
+
+			try{
+				integrator.integrate(ode, 0., y, totalDuration, y);
+			}
+			catch(Exception e){
+				return -100.;
+			}
+
+			double peakVolume = metrics[0];
+			double remainingSugar = metrics[1];
+
+			double structuralTearingPenalty = 0.;
+			if(peakVolume > 2.2){
+				structuralTearingPenalty = (peakVolume - 2.2) * 15.;
+			}
+
+			double yeastAbusePenalty = yDry * 8.;
+
+			return peakVolume + remainingSugar * 5. - structuralTearingPenalty - yeastAbusePenalty;
 		};
 
-		// 6. Brent Optimizer Execution for MAXIMIZATION
-		// NOTE: You can adjust the upperBound here (e.g., 0.015) to restrict search to realistic baking ranges
+		// 6. Brent Optimizer Configuration & Selection Execution
+		// APPLIED PHYSICAL LIMIT: Lower bound is 0.01% and Upper Bound is strictly capped
+		// at 1.5% dry yeast, which equates to exactly 5% standard commercial fresh yeast.
 		final double lowerBound = 0.0001;
 		final double upperBound = 0.015;
 		final double relativeAccuracy = 1e-6;
@@ -164,17 +179,56 @@ public final class Main2{
 		final UnivariateOptimizer optimizer = new BrentOptimizer(relativeAccuracy, absoluteAccuracy);
 
 		final UnivariatePointValuePair optimizationResult = optimizer.optimize(
-			new MaxEval(100),
-			new UnivariateObjectiveFunction(volumeObjectiveFunction),
+			new MaxEval(150),
+			new UnivariateObjectiveFunction(structuralObjectiveFunction),
 			GoalType.MAXIMIZE,
 			new SearchInterval(lowerBound, upperBound)
 		);
 
 		final double yDryOptimal = optimizationResult.getPoint();
-		final double maxVolumeReached = optimizationResult.getValue();
+
+		// 7. Diagnostic Pass
+		final FirstOrderIntegrator diagnosticIntegrator = new DormandPrince853Integrator(1e-6, totalDuration, 1e-6, 1e-6);
+		if(folds.length > 0)
+			diagnosticIntegrator.addEventHandler(new FoldEventHandler(folds), 0.01, 1e-4, 100);
+
+		final double[] finalMetrics = {1., sugarInitial};
+		diagnosticIntegrator.addStepHandler(new StepHandler(){
+			@Override
+			public void init(double t0, double[] y0, double t){
+				finalMetrics[0] = y0[0];
+				finalMetrics[1] = y0[2];
+			}
+
+			@Override
+			public void handleStep(StepInterpolator interpolator, boolean isLast){
+				double[] yInterp = interpolator.getInterpolatedState();
+				if(yInterp[0] > finalMetrics[0]){
+					finalMetrics[0] = yInterp[0];
+				}
+				finalMetrics[1] = yInterp[2];
+			}
+		});
+
+		final DoughOdeSystem finalOde = new DoughOdeSystem(yDryOptimal, stages, stiffnessIndexBase, saltK, oilK, totalWaterContent);
+		final double[] finalY = {1., 0., sugarInitial, 0.};
+
+		try{
+			diagnosticIntegrator.integrate(finalOde, 0., finalY, totalDuration, finalY);
+		}
+		catch(Exception ignored){
+		}
+
+		double peakVolume = finalMetrics[0];
+		double remainingSugar = finalMetrics[1];
+		double structuralTearingPenalty = 0.;
+		if(peakVolume > 2.2){
+			structuralTearingPenalty = (peakVolume - 2.2) * 15.;
+		}
+
 		final double commercialYeast = yDryOptimal / (1. - in.getYeastMoisture());
 
-		return new SimulationResult(commercialYeast, maxVolumeReached);
+		return new SimulationResult(commercialYeast, peakVolume, remainingSugar, structuralTearingPenalty);
 	}
 
 }
