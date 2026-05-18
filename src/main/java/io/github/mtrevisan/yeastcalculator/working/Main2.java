@@ -33,17 +33,17 @@ public final class Main2{
 		double dotFiber = 0.;
 		double dotAsh = 0.;
 		double dotγ = 0.;
-		final Object[][] matrix = in.getFlourMatrix();
-
-		for(int i = 0; i < flours; i++){
-			final double strength = ((Number)matrix[i][0]).doubleValue();
-			final double pl = ((Number)matrix[i][1]).doubleValue();
-			final double sugar = ((Number)matrix[i][2]).doubleValue();
-			final double protein = ((Number)matrix[i][3]).doubleValue();
-			final double fats = ((Number)matrix[i][4]).doubleValue();
-			final double fiber = ((Number)matrix[i][5]).doubleValue();
-			final double ash = ((Number)matrix[i][6]).doubleValue();
-			final String type = (String)matrix[i][7];
+		final FlourInput[] matrix = in.getFlourMatrix();
+		for(int i = 0; i < flours; i ++){
+			final FlourInput flour = matrix[i];
+			final double strength = flour.getStrengthW();
+			final double pl = flour.getPlRatio();
+			final double sugar = flour.getSugar();
+			final double protein = flour.getProtein();
+			final double fats = flour.getFat();
+			final double fiber = flour.getFiber();
+			final double ash = flour.getAsh();
+			final String type = flour.getType();
 
 			final FlourRegistry.FlourProperties props = FlourRegistry.resolveProperties(type);
 			final double γ_i = props.baseLookup * Math.exp(-2.0 * fats) * Math.exp(-0.5 * sugar);

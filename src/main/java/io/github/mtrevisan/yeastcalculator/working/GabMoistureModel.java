@@ -25,12 +25,13 @@ final class GabMoistureModel{
 
 		final double aw = clamp(in.getAirRelativeHumidity(), 0.1, 0.95);
 		final double temperatureCoeff = 1. - 0.0025 * (in.getFlourTemperature() - 20.);
-		final Object[][] matrix = in.getFlourMatrix();
+		final FlourInput[] matrix = in.getFlourMatrix();
 
 		for(int i = 0; i < fractions.length; i ++){
-			final double protein = ((Number)matrix[i][3]).doubleValue();
-			final double fiber = ((Number)matrix[i][6]).doubleValue();
-			final String type = (String)matrix[i][7];
+			final FlourInput flour = matrix[i];
+			final double protein = flour.getProtein();
+			final double fiber = flour.getFiber();
+			final String type = flour.getType();
 
 			final FlourRegistry.FlourProperties props = FlourRegistry.resolveProperties(type);
 
