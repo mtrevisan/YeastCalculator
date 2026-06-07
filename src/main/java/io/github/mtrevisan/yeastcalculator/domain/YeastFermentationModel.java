@@ -17,13 +17,13 @@ public final class YeastFermentationModel {
 	private static final double TEMP_MAX = 42.;
 
 	// Baranyi & Roberts (1994) / Rosso Biological Constants
-	public static final double MU_MAX_REF = 0.52; // Maximum specific growth rate reference [h^-1]
+	public static final double MU_MAX_REF = 1.35; // Maximum specific growth rate reference [h^-1]
 	public static final double WB_ACTIVATION_THRESHOLD = 0.05; // Critical moisture below which cells are in anabiosis
 	public static final double WB_FRESH_COMPRESSED = 0.70; // Reference moisture for fully active compressed yeast
 	public static final double Q0_ANHYDROUS = 0.05; // Initial metabolic readiness pool for dry active cells
-	public static final double Q0_FRESH_COMPRESSED = 0.45; // Initial metabolic readiness pool for fresh cells
+	public static final double Q0_FRESH_COMPRESSED = 0.85; // Initial metabolic readiness pool for fresh cells
 
-	private static final double POTENTIAL_MU_MAX = 205.;
+	private static final double POTENTIAL_MU_MAX = 390.;
 	private static final double SUGAR_AFFINITY_K = 0.005;
 	// Stoichiometric coefficient: kg of sugar consumed per kg of biomass generated
 	private static final double YEAST_SUGAR_YIELD_Y = 0.015;
@@ -31,7 +31,8 @@ public final class YeastFermentationModel {
 	private static final double MAINTENANCE_COEFF_M = 0.0012;
 
 	// Flour Alpha-Amylase maximum conversion velocity (starch -> maltose conversion)
-	private static final double AMYLASE_VMAX_BASE = 0.008;
+	private static final double AMYLASE_VMAX_BASE = 0.022;
+//FIXME	private static final double AMYLASE_VMAX_BASE = 0.022; se con malto diastasico
 
 	// Biochemical inhibition multipliers (Fixed Osmotic Code Smell constants)
 	private static final double SALT_INHIBITION_MULTIPLIER = -15.;
@@ -121,13 +122,14 @@ public final class YeastFermentationModel {
 	 * Accounts for concurrent enzymatic starch breakdown (generation) and yeast metabolism (consumption).
 	 */
 	public static double calculateNetSugarRate(final double sugar, final double muBio, final double yeast,
-		final double temperature){
+			final double temperature, final double currentAmylaseVMax){
 		if(sugar <= 0. && muBio <= 0.)
 			return 0.;
 
 		final double amylaseThermalK = Math.exp(0.06 * (temperature - 20.))
-			* (1. - 0.005 * Math.pow(temperature - 35., 2));
-		final double sugarGeneration = AMYLASE_VMAX_BASE * StrictMath.max(0., amylaseThermalK);
+			* (1. - 0.005 * Math.pow(temperature - 35., 2.));
+
+		final double sugarGeneration = currentAmylaseVMax * StrictMath.max(0., amylaseThermalK);
 		final double sugarConsumption = muBio * YEAST_SUGAR_YIELD_Y + yeast * MAINTENANCE_COEFF_M;
 		return sugarGeneration - sugarConsumption;
 	}

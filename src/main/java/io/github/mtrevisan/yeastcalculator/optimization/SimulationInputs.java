@@ -20,10 +20,13 @@ public class SimulationInputs{
 	private final BakeryProduct targetProduct = BakeryProduct.GASTRONOMY_PAN_PIZZA;
 
 	// Total weight of the dough block
-	private final double doughMass = 0.250;
+	private final double doughMass = 0.2668;
+
+	private final double doughMalt = 0.008;
+	private final double maltSugar = 0.5;
 
 	// Pre-soak duration in warm water [hours]
-	private final double yeastRehydrationDuration = 0.25;
+	private final double yeastRehydrationDuration = 5. / 60.;
 
 	private final double[] fractions = {1.};
 
@@ -32,12 +35,12 @@ public class SimulationInputs{
 	};
 
 	private final StageInput[] stages = {
-		new StageInput(26., 0.55, 9.)
+		new StageInput(32., 0.55, 2.)
 	};
 
 	private final double[] folds = {};
 
-	private final double doughWater = 0.615;
+	private final double doughWater = 0.60;
 	private final double doughSalt = 0.022;
 	private final double doughOil = 0.039;
 	/**
@@ -57,6 +60,8 @@ public class SimulationInputs{
 
 
 	public double getDoughMass() { return doughMass; }
+
+	public double getDoughMalt() { return doughMalt; }
 
 	public double getYeastRehydrationDuration() { return yeastRehydrationDuration; }
 
@@ -140,7 +145,19 @@ public class SimulationInputs{
 		final double[] normalizedFractions = getFractions();
 		for(int i = 0; i < fractions.length; i ++)
 			dotSugar += flourMatrix[i].getSugar() * normalizedFractions[i];
-		return dotSugar;
+		final double sugarFromMalt = doughMalt * maltSugar;
+		return dotSugar + sugarFromMalt;
+	}
+
+	/**
+	 * Calculate the increase in the total amylase potential of the dough.
+	 * Diastatic malt linearly increases the maximum rate of starch breakdown.
+	 */
+	public double getEffectiveAmylaseVMax(){
+		// 0.008 is the baseline value for flour. Every 1% of malt (0.01) adds a strong enzymatic boost.
+		final double baseAmylaseVMax = 0.008;
+		final double maltEnzymaticSpike = doughMalt * 1.75;
+		return baseAmylaseVMax + maltEnzymaticSpike;
 	}
 
 	public FlourInput[] getFlourMatrix(){

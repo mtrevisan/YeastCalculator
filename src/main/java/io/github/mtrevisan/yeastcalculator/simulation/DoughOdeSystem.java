@@ -35,6 +35,7 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	private final double sugarInitial;
 	private final double glutenTearingLimit;
 	private final double doughMass;
+	private final double amylaseVMax;
 
 	// Domain Physical Constants
 	private static final double CO2_SATURATION_LIMIT = 0.0015;
@@ -56,7 +57,7 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	 */
 	public DoughOdeSystem(final double yDry, final StageInput[] stages, final double stiffnessIndexBase,
 			final double saltK, final double oilK, final double waterContent, final double sugarInitial,
-			final double glutenTearingLimit, final double doughMass){
+			final double glutenTearingLimit, final double doughMass, final double amylaseVMax){
 		this.yDry = yDry;
 		this.stages = stages;
 		this.stiffnessIndexBase = stiffnessIndexBase;
@@ -66,6 +67,7 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		this.sugarInitial = sugarInitial;
 		this.glutenTearingLimit = glutenTearingLimit;
 		this.doughMass = doughMass;
+		this.amylaseVMax = amylaseVMax;
 	}
 
 
@@ -136,7 +138,7 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		// dQ/dt = mu_max_ref * alpha_thermal * Q. Environment-independent enzymatic engine.
 		yDot[1] = YeastFermentationModel.MU_MAX_REF * alphaBio * qCurr;
 		// dSugar/dt
-		yDot[2] = YeastFermentationModel.calculateNetSugarRate(sugarCurr, muBio, yDry, tClamped);
+		yDot[2] = YeastFermentationModel.calculateNetSugarRate(sugarCurr, muBio, yDry, tClamped, amylaseVMax);
 
 		// 5. GAS KINETICS - Separation of dissolved aqueous CO2 vs. gaseous pocket phase
 		// Pasteur transition effect tracking

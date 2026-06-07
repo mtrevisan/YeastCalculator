@@ -109,6 +109,7 @@ public final class Main{
 		final double[] folds = (in.getFolds() == null? new double[0]: in.getFolds());
 
 		final double sugarInitial = in.getBlendedSugar() + AMYLASE_ACCESSIBLE_SUGAR_OFFSET;
+		final double effectiveAmylaseVMax = in.getEffectiveAmylaseVMax();
 		final BakeryProduct product = in.getTargetProduct();
 
 		// PHYSIOLOGY SETUP - Compute effective Q0 prior to continuous time zero integration
@@ -135,7 +136,7 @@ public final class Main{
 			in.getHydratedStiffnessIndex(flourMoisture),
 			YeastFermentationModel.calculateSaltInhibition(in.getDoughSalt()),
 			YeastFermentationModel.calculateOilInhibition(in.getDoughOil()),
-			totalWaterContent, sugarInitial
+			totalWaterContent, sugarInitial, effectiveAmylaseVMax
 		);
 
 		// 4. Optimization Engine Function Objective Blueprint
@@ -195,7 +196,8 @@ public final class Main{
 		final double[] y = {1., q0, ctx.getSugarInitial(), 0., 0., 0.001};
 
 		final DoughOdeSystem ode = new DoughOdeSystem(yDry, ctx.getStages(), ctx.getStiffness(), ctx.getSaltK(),
-			ctx.getOilK(), ctx.getWaterContent(), ctx.getSugarInitial(), product.getGlutenTearingLimit(), doughMass);
+			ctx.getOilK(), ctx.getWaterContent(), ctx.getSugarInitial(), product.getGlutenTearingLimit(), doughMass,
+			ctx.getAmylaseVMax());
 		try{
 			integrator.integrate(ode, 0., y, ctx.getTotalDuration(), y);
 		}

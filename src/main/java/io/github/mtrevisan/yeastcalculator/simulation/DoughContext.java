@@ -24,6 +24,7 @@ public final class DoughContext{
 	private final double oilK;
 	private final double waterContent;
 	private final double sugarInitial;
+	private final double amylaseVMax;
 
 
 	/**
@@ -41,14 +42,15 @@ public final class DoughContext{
 	 */
 	public static DoughContext create(final StageInput[] stages, final double[] folds, final double totalDuration,
 			final double stiffness, final double saltK, final double oilK, final double waterContent,
-			final double sugarInitial) {
-		return new DoughContext(stages, folds, totalDuration, stiffness, saltK, oilK, waterContent, sugarInitial);
+			final double sugarInitial, final double amylaseVMax){
+		return new DoughContext(stages, folds, totalDuration, stiffness, saltK, oilK, waterContent, sugarInitial,
+			amylaseVMax);
 	}
 
 
 	DoughContext(final StageInput[] stages, final double[] folds, final double totalDuration,
 			final double stiffness, final double saltK, final double oilK, final double waterContent,
-			final double sugarInitial){
+			final double sugarInitial, final double amylaseVMax){
 		this.stages = Objects.requireNonNull(stages);
 		this.folds = Objects.requireNonNull(folds);
 		this.totalDuration = totalDuration;
@@ -57,6 +59,7 @@ public final class DoughContext{
 		this.oilK = oilK;
 		this.waterContent = waterContent;
 		this.sugarInitial = sugarInitial;
+		this.amylaseVMax = amylaseVMax;
 	}
 
 
@@ -91,5 +94,7 @@ public final class DoughContext{
 	public double getSugarInitial(){
 		return sugarInitial;
 	}
+
+	public double getAmylaseVMax() { return amylaseVMax; }
 
 }
