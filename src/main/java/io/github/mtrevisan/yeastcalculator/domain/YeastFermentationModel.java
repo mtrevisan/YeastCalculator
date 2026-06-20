@@ -23,16 +23,14 @@ public final class YeastFermentationModel {
 	public static final double Q0_ANHYDROUS = 0.05; // Initial metabolic readiness pool for dry active cells
 	public static final double Q0_FRESH_COMPRESSED = 0.85; // Initial metabolic readiness pool for fresh cells
 
-	private static final double POTENTIAL_MU_MAX = 390.;
 	private static final double SUGAR_AFFINITY_K = 0.005;
 	// Stoichiometric coefficient: kg of sugar consumed per kg of biomass generated
-	private static final double YEAST_SUGAR_YIELD_Y = 0.015;
+	private static final double YEAST_SUGAR_YIELD_Y = 1.67;
 	// Maintenance coefficient: sugar consumed just to keep cells alive per hour, even without growth
-	private static final double MAINTENANCE_COEFF_M = 0.0012;
+	private static final double MAINTENANCE_COEFF_M = 0.012;
 
 	// Flour Alpha-Amylase maximum conversion velocity (starch -> maltose conversion)
-	private static final double AMYLASE_VMAX_BASE = 0.022;
-//FIXME	private static final double AMYLASE_VMAX_BASE = 0.022; se con malto diastasico
+	private static final double MAX_AMYLOBREAKDOWN_CAP = 0.07;
 
 	// Biochemical inhibition multipliers (Fixed Osmotic Code Smell constants)
 	private static final double SALT_INHIBITION_MULTIPLIER = -15.;
@@ -109,12 +107,13 @@ public final class YeastFermentationModel {
 	 */
 	public static double calculateBiomassGrowthRate(final double yeast, final double alphaBio,
 		final double qCurr, final double sugar, final double saltK, final double oilK) {
+		// Monod-like sugar limitation
 		final double sugarK = sugar / (sugar + SUGAR_AFFINITY_K);
 
-		// Baranyi rational adjustment factor alpha_lag. Highly robust, non-arbitrary.
+		// Baranyi rational adjustment factor alpha_lag
 		final double alphaLag = qCurr / (qCurr + 1.0);
 
-		return POTENTIAL_MU_MAX * yeast * alphaBio * saltK * oilK * sugarK * alphaLag;
+		return MU_MAX_REF * yeast * alphaBio * saltK * oilK * sugarK * alphaLag;
 	}
 
 	/**
@@ -122,15 +121,16 @@ public final class YeastFermentationModel {
 	 * Accounts for concurrent enzymatic starch breakdown (generation) and yeast metabolism (consumption).
 	 */
 	public static double calculateNetSugarRate(final double sugar, final double muBio, final double yeast,
-			final double temperature, final double currentAmylaseVMax){
+		final double temperature, final double currentAmylaseVMax){
 		if(sugar <= 0. && muBio <= 0.)
 			return 0.;
 
 		final double amylaseThermalK = Math.exp(0.06 * (temperature - 20.))
-			* (1. - 0.005 * Math.pow(temperature - 35., 2.));
+			* (1. - 0.005 * Math.pow(temperature - 33., 2.));
 
-		final double sugarGeneration = currentAmylaseVMax * StrictMath.max(0., amylaseThermalK);
-		final double sugarConsumption = muBio * YEAST_SUGAR_YIELD_Y + yeast * MAINTENANCE_COEFF_M;
+		final double starchSubstrateLeft = Math.max(0., 1.0 - (sugar / MAX_AMYLOBREAKDOWN_CAP));
+		final double sugarGeneration = currentAmylaseVMax * StrictMath.max(0., amylaseThermalK) * starchSubstrateLeft;
+		final double sugarConsumption = (muBio / YEAST_SUGAR_YIELD_Y) + MAINTENANCE_COEFF_M * yeast;
 		return sugarGeneration - sugarConsumption;
 	}
 

@@ -35,14 +35,16 @@ public class SimulationInputs{
 	};
 
 	private final StageInput[] stages = {
-		new StageInput(32., 0.55, 2.)
+		new StageInput(28., 0.55, 3.)
 	};
 
 	private final double[] folds = {};
 
 	private final double doughWater = 0.60;
 	private final double doughSalt = 0.022;
-	private final double doughOil = 0.039;
+	//previous
+//	private final double doughOil = 0.039;
+	private final double doughOil = 0.05;
 	/**
 	 * Moisture of the yeast [g_water / g_wet_yeast]:
 	 * 	<ul>

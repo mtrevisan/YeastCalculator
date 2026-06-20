@@ -1,6 +1,7 @@
 package io.github.mtrevisan.yeastcalculator;
 
 import java.util.Arrays;
+import java.util.Locale;
 
 import io.github.mtrevisan.yeastcalculator.domain.BakeryProduct;
 import io.github.mtrevisan.yeastcalculator.domain.GabMoistureModel;
@@ -81,9 +82,9 @@ public final class Main{
 		final SimulationInputs inputs = new SimulationInputs();
 		final SimulationResult result = calculateOptimalYeast(inputs);
 
-		System.out.printf("Optimal Yeast [%%]:   %.4f%n", result.optimalYeast());
-		System.out.printf("Peak Volume Ratio:   %.1f%n", result.peakVolume());
-		System.out.printf("Remaining Sugar [%%]: %.4f%n", result.remainingSugar());
+		System.out.printf(Locale.US, "Optimal Yeast    : %.2f%%%n", result.optimalYeast() * 100.);
+		System.out.printf(Locale.US, "Peak Volume Ratio: %.1f%n", result.peakVolume());
+		System.out.printf(Locale.US, "Remaining Sugar  : %.2f%%%n", result.remainingSugar() * 100.);
 	}
 
 	/**
@@ -192,8 +193,8 @@ public final class Main{
 		// y[2] = sugarInitial (Initial carbohydrate substrate pool)
 		// y[3] = 0 (Initial dissolved carbon dioxide concentration)
 		// y[4] = 0 (Initial macro-structural protein network degradation)
-		// y[5] = 0.001 (Atmospheric/equilibrium basal micro-bubble gas pressure reference)
-		final double[] y = {1., q0, ctx.getSugarInitial(), 0., 0., 0.001};
+		// y[5] = 101325. (Atmospheric/equilibrium basal micro-bubble gas pressure reference)
+		final double[] y = {1., q0, ctx.getSugarInitial(), 0., 0., 101325.};
 
 		final DoughOdeSystem ode = new DoughOdeSystem(yDry, ctx.getStages(), ctx.getStiffness(), ctx.getSaltK(),
 			ctx.getOilK(), ctx.getWaterContent(), ctx.getSugarInitial(), product.getGlutenTearingLimit(), doughMass,

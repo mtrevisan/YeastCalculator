@@ -26,6 +26,9 @@ import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
  */
 public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
+	private static final double SECONDS_PER_HOUR = 3600.;
+
+
 	private final double yDry;
 	private final StageInput[] stages;
 	private final double stiffnessIndexBase;
@@ -137,41 +140,58 @@ public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 		// dQ/dt = mu_max_ref * alpha_thermal * Q. Environment-independent enzymatic engine.
 		yDot[1] = YeastFermentationModel.MU_MAX_REF * alphaBio * qCurr;
+
+		// 4. CARBOHYDRATE SUBSTRATE DEPLETION
 		// dSugar/dt
-		yDot[2] = YeastFermentationModel.calculateNetSugarRate(sugarCurr, muBio, yDry, tClamped, amylaseVMax);
+		final double currentAmylaseVMax = amylaseVMax * alphaBio;
+		final double netSugarRatePerHour = YeastFermentationModel.calculateNetSugarRate(sugarCurr, muBio, yDry, tClamped,
+			currentAmylaseVMax);
+		yDot[2] = netSugarRatePerHour;
 
 		// 5. GAS KINETICS - Separation of dissolved aqueous CO2 vs. gaseous pocket phase
 		// Pasteur transition effect tracking
-		final double anaerobicFactor = 1. - Math.exp(-3. * t);
-		final double totalCo2ProductionRate = muBio * STOICHIOMETRIC_CO2_YIELD * anaerobicFactor;
-		double gasDesorptionRate;
+		final double anaerobicFactor = 1. - Math.exp(-30. * t);
+		final double sugarConsumedPerHour = muBio / 1.67 + 0.012 * yDry;
+		final double totalCo2ProductionRatePerHour = sugarConsumedPerHour * STOICHIOMETRIC_CO2_YIELD * anaerobicFactor
+			/ dynamicWaterContent;
+		final double co2DesorptionKPerHour = CO2_DESORPTION_K * SECONDS_PER_HOUR;
+		double gasDesorptionRatePerHour;
 		if(co2Dissolved > dynamicSaturationLimit){
-			gasDesorptionRate = CO2_DESORPTION_K * (co2Dissolved - dynamicSaturationLimit) * dynamicWaterContent;
-			yDot[3] = totalCo2ProductionRate - gasDesorptionRate;
+			gasDesorptionRatePerHour = co2DesorptionKPerHour * (co2Dissolved - dynamicSaturationLimit);
+			yDot[3] = totalCo2ProductionRatePerHour - gasDesorptionRatePerHour;
 		}
 		else{
-			yDot[3] = totalCo2ProductionRate;
-			gasDesorptionRate = 0.;
+			yDot[3] = totalCo2ProductionRatePerHour;
+			gasDesorptionRatePerHour = 0.;
 		}
 
 		// 6. VISCOELASTIC VOLUMETRIC EXPANSION (Maxwell-like pneumatic work balance)
 		final double netGasVolume = (vCurr - 1.) + INITIAL_GAS_POROSITY;
+		final double gasDesorptionKgPerSecond = gasDesorptionRatePerHour / SECONDS_PER_HOUR;
 		// Ideal equilibrium reference pressure calculation
-		final double equilibriumPressure = gasDesorptionRate * GAS_CONSTANT_R * (tClamped + TEMPERATURE_KELVIN_OFFSET)
-			/ netGasVolume;
+		// 1200 is the indicative density of the mixture in kg/m^3
+		final double equilibriumPressure = 101325. + (gasDesorptionKgPerSecond * GAS_CONSTANT_R * (tClamped + TEMPERATURE_KELVIN_OFFSET)
+			/ (netGasVolume * (doughMass / 1200.)));
 
 		// Dynamic mass relaxation pathway moving toward spatial pressure equilibrium
-		yDot[5] = 25. * (equilibriumPressure - internalPressure);
+		yDot[5] = 50 * (equilibriumPressure - internalPressure) * SECONDS_PER_HOUR;
 
-		if (gasDesorptionRate <= 0. && internalPressure <= 0.)
+		if (gasDesorptionRatePerHour <= 0. && internalPressure <= 101325.)
 			yDot[0] = 0.;
 		else{
 			// Sigmoid continuous microstructural venting modeling membrane micro-cracking
-			final double matrixPermeabilityK = 1. / (1. + Math.exp(5. * (vCurr - glutenTearingLimit)));
+			final double matrixPermeabilityK = 1. / (1. + Math.exp(-12. * (vCurr - (glutenTearingLimit - 0.2))));
+			// normalized stiffness in MPa
+			final double internalPneumaticForce = (internalPressure - 101325.)
+				/ (StrictMath.max(MIN_STIFFNESS_BOUND, dynamicStiffness) * 1e6);
+			final double dVdtPerSecond = internalPneumaticForce * (1. - matrixPermeabilityK) * vCurr;
 			// Viscous mechanical expansion velocity response equation (dV/dt)
-			yDot[0] = (internalPressure / StrictMath.max(MIN_STIFFNESS_BOUND, dynamicStiffness)) * vCurr
-				* matrixPermeabilityK;
+			yDot[0] = dVdtPerSecond * SECONDS_PER_HOUR;
 		}
+
+		// 7. PROTEOLYTIC MATRIX DEGRADATION
+		final double proteolyticVMax = 0.00015 * (1. + 3. * (1. - saltK));
+		yDot[4] = proteolyticVMax * (tCurr / 32.);
 	}
 
 }
