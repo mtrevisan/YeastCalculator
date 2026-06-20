@@ -68,7 +68,7 @@ public final class YeastFermentationModel {
 	 * @return Blended effective Q0 coordinate ready for dough integration initiation.
 	 */
 	public static double activeQAfterRehydration(final double q0Dry, final double rehydrationHours) {
-		if (rehydrationHours <= 0.0) return q0Dry;
+		if (rehydrationHours <= 0.) return q0Dry;
 		return q0Dry * Math.exp(MU_MAX_REF * rehydrationHours);
 	}
 
@@ -111,7 +111,7 @@ public final class YeastFermentationModel {
 		final double sugarK = sugar / (sugar + SUGAR_AFFINITY_K);
 
 		// Baranyi rational adjustment factor alpha_lag
-		final double alphaLag = qCurr / (qCurr + 1.0);
+		final double alphaLag = qCurr / (qCurr + 1.);
 
 		return MU_MAX_REF * yeast * alphaBio * saltK * oilK * sugarK * alphaLag;
 	}
@@ -128,7 +128,7 @@ public final class YeastFermentationModel {
 		final double amylaseThermalK = Math.exp(0.06 * (temperature - 20.))
 			* (1. - 0.005 * Math.pow(temperature - 33., 2.));
 
-		final double starchSubstrateLeft = Math.max(0., 1.0 - (sugar / MAX_AMYLOBREAKDOWN_CAP));
+		final double starchSubstrateLeft = Math.max(0., 1. - (sugar / MAX_AMYLOBREAKDOWN_CAP));
 		final double sugarGeneration = currentAmylaseVMax * StrictMath.max(0., amylaseThermalK) * starchSubstrateLeft;
 		final double sugarConsumption = (muBio / YEAST_SUGAR_YIELD_Y) + MAINTENANCE_COEFF_M * yeast;
 		return sugarGeneration - sugarConsumption;
