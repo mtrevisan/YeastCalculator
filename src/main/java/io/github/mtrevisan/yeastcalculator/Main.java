@@ -54,8 +54,7 @@ public class Main{
 
 		// 6. Multi-stage fermentation schedule
 		final StageInput[] stages = {
-			new StageInput(24., 0.75, 4.),
-			new StageInput(30., 0.54, 1.5)
+			new StageInput(28., 0.75, 4.5)
 		};
 
 		// 7. Physical structural interventions (Stretch & Fold timestamps in hours)
@@ -75,20 +74,18 @@ public class Main{
 		// Execute Inversion Optimization Target Calculation
 		final double optimalYeastRatio = YeastOptimizer.findOptimalYeast(inputs, selectedProduct);
 
-		System.out.printf("Optimal Yeast Ratio Target Required: %.3f%%\n", optimalYeastRatio * 100.);
+		System.out.printf("Optimal Yeast: %.2f%%\n", optimalYeastRatio * 100.);
 
 		// Run confirmation simulation at target values to extract chemical endpoints
 		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(inputs);
-		final double maxGasPotential = YeastOptimizer.calculateMaxGasPotential(new double[]{295., 0.55, 0.011, 0.003},
-			inputs, selectedProduct);
-		final double[] finalState = YeastOptimizer.runSimulation(inputs, gab, maxGasPotential, optimalYeastRatio);
+		final double[] finalState = YeastOptimizer.runSimulation(inputs, gab, optimalYeastRatio, selectedProduct);
 
 		if(finalState != null){
 			System.out.println("\n--- FINAL DOUGH STATE AT TIMELINE EXPIRATION ---");
-			System.out.printf("Active Dry Yeast          : %.3f%%\n", finalState[0] * 100.);
-			System.out.printf("Residual Sugars Remaining : %.2f%%\n", finalState[1] * 100.);
-			System.out.printf("Final Retained Gas Volume : %.2f ml/g_flour\n", finalState[2]);
-			System.out.printf("Ethanol Accumulation      : %.2f g/kg_dough\n", finalState[3] * 1000.);
+			System.out.printf("Yeast                : %.2f%%\n", finalState[0] * 100.);
+			System.out.printf("Sugars               : %.2f%%\n", finalState[1] * 100.);
+			System.out.printf("Retained Gas Volume  : %.1f ml/g_flour\n", finalState[2]);
+			System.out.printf("Ethanol Accumulation : %.1f g/kg_dough\n", finalState[3] * 1000.);
 
 			// Calculate total timeline execution hours
 			double totalDurationHours = 0.;
@@ -99,11 +96,30 @@ public class Main{
 			evaluateMaturationQuality(inputs, totalDurationHours);
 
 			// Execute Maillard / Sugar verification
-			System.out.println("\n--- BIOCHEMICAL DIAGNOSTICS ---");
+			System.out.println("\n--- BIOCHEMICAL & SENSORY DIAGNOSTICS ---");
+			// 1. Maillard Reaction / Sugar Check
 			if(finalState[1] < selectedProduct.getMinSafeSugarThreshold())
 				System.out.println("[CRITICAL] Sugar levels dropped below safe baking charts thresholds! Crust will bake pale.");
-			else
-				System.out.println("[SUCCESS] Sugar levels safely satisfied target baking requirement benchmarks.");
+//			else
+//				System.out.println("[SUCCESS] Sugar levels safely satisfied target baking requirement benchmarks.");
+			// 2. NEW: Yeast Residue / Off-Flavor Check
+			final double finalYeastPercent = finalState[0] * 100.;
+			final double maxAllowedYeastPercent = selectedProduct.getMaxAllowedFinalYeast() * 100.;
+			if(finalState[0] > selectedProduct.getMaxAllowedFinalYeast()){
+				System.out.printf("[CRITICAL] Sensory Alert: Residual active yeast (%.2f%%) exceeds the off-flavor profile threshold (Max: %.2f%%) for %s.\n",
+					finalYeastPercent, maxAllowedYeastPercent, selectedProduct.name());
+				System.out.println("           Result: The final product will have a strong, pungent chemical/yeasty smell and taste.");
+			}
+			else if(finalState[0] >= (selectedProduct.getMaxAllowedFinalYeast() * 0.85)){
+				System.out.printf("[NOTICE] Pushing Sensory Limits: Residual active yeast (%.2f%%) is approaching the maximum allowed ceiling (%.2f%%).\n",
+					finalYeastPercent, maxAllowedYeastPercent);
+				System.out.println("         Result: Excellent oven-spring expected, but do not push the timeline any shorter to avoid taste degradation.");
+			}
+//			else{
+//				System.out.printf("[SUCCESS] Clean Sensory Profile: Residual active yeast (%.2f%%) is well within safe bounds (Max: %.2f%%).\n",
+//					finalYeastPercent, maxAllowedYeastPercent);
+//				System.out.println("         Result: Clean, traditional fermentation aroma without heavy yeasty overtones.");
+//			}
 		}
 		else
 			System.err.println("Critical Error: Core tracking verification integration run failed.");
@@ -127,7 +143,7 @@ public class Main{
 			blendW += fractions[i] * flourMatrix[i].getStrength();
 
 		// 2. Estimate base required maturation hours at room temperature as a function of W
-		// Standard benchmark: A W300 flour requires roughly 6.0 hours at 24-28°C for full protease relaxation.
+		// Standard benchmark: A W300 flour requires roughly 6 hours at 24-28°C for full protease relaxation.
 		double estimatedRequiredHours = (blendW / 300.) * 6.;
 
 		// 3. Kinetic correction factor based on hydration (Water Ratio)
@@ -153,11 +169,11 @@ public class Main{
 			System.out.println("          Result: Protease activity might over-degrade the gluten matrix structure,");
 			System.out.println("                  leading to a sticky, fragile dough prone to tearing.");
 		}
-		else{
-			System.out.printf("[SUCCESS] Maturation timeline (%.1fh) is well-proportioned for this blend (W: %.0f, Hydration: %.0f%%).\n",
-				totalDurationHours, blendW, waterRatio * 100.);
-			System.out.println("          Result: Optimal balance between gluten extensibility and gas holding matrix tenacity.");
-		}
+//		else{
+//			System.out.printf("[SUCCESS] Maturation timeline (%.1fh) is well-proportioned for this blend (W: %.0f, Hydration: %.0f%%).\n",
+//				totalDurationHours, blendW, waterRatio * 100.);
+//			System.out.println("          Result: Optimal balance between gluten extensibility and gas holding matrix tenacity.");
+//		}
 	}
 
 }

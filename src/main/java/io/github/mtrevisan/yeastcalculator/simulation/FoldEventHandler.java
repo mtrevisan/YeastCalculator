@@ -9,7 +9,7 @@ import org.apache.commons.math3.ode.events.EventHandler;
 public class FoldEventHandler implements EventHandler{
 
 	private final double[] foldTimestamps;
-	private double currentGasPotentialModifier = 1.0;
+	private double currentGasPotentialModifier = 1.;
 
 
 	public FoldEventHandler(final double[] foldTimestamps){

@@ -47,7 +47,7 @@ public class YeastOptimizer{
 			final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, in.getFolds().length) * skinningModifier;
 
 			// CLEAN ENCAPSULATION: Delegates the specific target cost to the selected product enum
-			return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1], yDotFinal[2]);
+			return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1] ,y[0], yDotFinal[2]);
 		};
 
 		final BrentOptimizer optimizer = new BrentOptimizer(1.e-6, 1.e-6);
@@ -59,7 +59,21 @@ public class YeastOptimizer{
 		).getPoint();
 	}
 
+	/**
+	 * High-level simulation orchestrator that encapsulates internal structural metrics
+	 * to prevent Feature Envy in the calling client.
+	 */
 	public static double[] runSimulation(final SimulationInputs in, final GabMoistureModel.GabResult gab,
+			final double yeastRatio, final BakeryProduct targetProduct){
+		// Internal parameters are resolved automatically inside the owner class
+		final double[] summary = inputsSummary(in);
+		final double baseMaxGasPotential = calculateMaxGasPotential(summary, in, targetProduct);
+
+		// Delegates to the low-level simulation logic
+		return runSimulation(in, gab, baseMaxGasPotential, yeastRatio);
+	}
+
+	private static double[] runSimulation(final SimulationInputs in, final GabMoistureModel.GabResult gab,
 			final double baseMaxGasPotential, final double yeastRatio){
 		// ACTIVATION YeastInput.getRehydrationDurationHours
 		// Calculation of biological efficiency based on rehydration time

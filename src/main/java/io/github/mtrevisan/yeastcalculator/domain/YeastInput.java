@@ -14,7 +14,7 @@ public class YeastInput{
 
 	public YeastInput(final double yeastMoisture, final double rehydrationDurationHours){
 		if(yeastMoisture < 0. || yeastMoisture > 1.)
-			throw new IllegalArgumentException("Yeast moisture must be a fraction between 0.0 and 1.0");
+			throw new IllegalArgumentException("Yeast moisture must be a fraction between 0 and 1");
 
 		this.yeastMoisture = yeastMoisture;
 		this.rehydrationDurationHours = rehydrationDurationHours;

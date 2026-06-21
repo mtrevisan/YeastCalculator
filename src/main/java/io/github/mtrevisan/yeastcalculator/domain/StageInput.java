@@ -20,8 +20,8 @@ public class StageInput{
 	 * Constructs a new proofing stage with strictly validated environmental parameters.
 	 *
 	 * @param temperature	The ambient temperature in Celsius [°C].
-	 * @param relativeHumidity	The ambient relative humidity as a decimal fraction [0.0, 1.0].
-	 * @param duration	The total duration of this specific stage in hours (>= 0.0).
+	 * @param relativeHumidity	The ambient relative humidity as a decimal fraction [0, 1].
+	 * @param duration	The total duration of this specific stage in hours (>= 0).
 	 */
 	public StageInput(final double temperature, final double relativeHumidity, final double duration){
 		this.temperature = temperature;
