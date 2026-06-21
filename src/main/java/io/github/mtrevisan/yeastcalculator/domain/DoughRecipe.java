@@ -1,4 +1,4 @@
-package io.github.mtrevisan.yeastcalculator.backery;
+package io.github.mtrevisan.yeastcalculator.domain;
 
 
 /**
@@ -18,9 +18,9 @@ public class DoughRecipe{
 	private final double mixerFrictionFactor;
 
 
-	public DoughRecipe(double waterRatio, double saltRatio, double oilRatio,
-			double maltRatio, double maltSugarContent,
-			double maltPollakUnit, double mixerFrictionFactor){
+	public DoughRecipe(final double waterRatio, final double saltRatio, final double oilRatio,
+			final double maltRatio, final double maltSugarContent, final double maltPollakUnit,
+			final double mixerFrictionFactor){
 		this.waterRatio = waterRatio;
 		this.saltRatio = saltRatio;
 		this.oilRatio = oilRatio;

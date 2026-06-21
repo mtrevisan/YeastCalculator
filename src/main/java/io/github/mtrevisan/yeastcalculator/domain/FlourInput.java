@@ -1,9 +1,12 @@
 package io.github.mtrevisan.yeastcalculator.domain;
 
 
-public final class FlourInput{
+/**
+ * Encapsulates chemical and rheological specifications of a single flour instance.
+ */
+public class FlourInput{
 
-	private final double strengthW;
+	private final double strength;
 	private final double plRatio;
 	private final double sugar;
 	private final double protein;
@@ -13,9 +16,9 @@ public final class FlourInput{
 	private final FlourType type;
 
 
-	public FlourInput(final double strengthW, final double plRatio, final double sugar, final double protein,
+	public FlourInput(final double strength, final double plRatio, final double sugar, final double protein,
 			final double fat, final double fiber, final double ash, final FlourType type){
-		this.strengthW = strengthW;
+		this.strength = strength;
 		this.plRatio = plRatio;
 		this.sugar = sugar;
 		this.protein = protein;
@@ -26,8 +29,8 @@ public final class FlourInput{
 	}
 
 
-	public double getStrengthW(){
-		return strengthW;
+	public double getStrength(){
+		return strength;
 	}
 
 	public double getPlRatio(){
@@ -54,25 +57,8 @@ public final class FlourInput{
 		return ash;
 	}
 
-	FlourType getType(){
+	public FlourType getType(){
 		return type;
-	}
-
-	// Delegated parameters directly mapped to the safe Enum properties
-	double getWmBase(){
-		return type.getWmBase();
-	}
-
-	double getCGab(){
-		return type.getCGab();
-	}
-
-	double getKGab(){
-		return type.getKGab();
-	}
-
-	public double getBaseLookup(){
-		return type.getBaseLookup();
 	}
 
 }

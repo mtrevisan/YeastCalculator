@@ -1,226 +1,101 @@
 package io.github.mtrevisan.yeastcalculator;
 
-import java.util.Arrays;
+import io.github.mtrevisan.yeastcalculator.domain.BakeryProduct;
+import io.github.mtrevisan.yeastcalculator.domain.DoughRecipe;
+import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
+import io.github.mtrevisan.yeastcalculator.domain.FlourType;
+import io.github.mtrevisan.yeastcalculator.domain.KneadingInput;
+import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
+import io.github.mtrevisan.yeastcalculator.domain.StageInput;
+import io.github.mtrevisan.yeastcalculator.domain.YeastInput;
+import io.github.mtrevisan.yeastcalculator.optimization.YeastOptimizer;
+import io.github.mtrevisan.yeastcalculator.thermodynamic.GabMoistureModel;
+
 import java.util.Locale;
 
-import io.github.mtrevisan.yeastcalculator.domain.BakeryProduct;
-import io.github.mtrevisan.yeastcalculator.domain.GabMoistureModel;
-import io.github.mtrevisan.yeastcalculator.domain.StageInput;
-import io.github.mtrevisan.yeastcalculator.domain.YeastFermentationModel;
-import io.github.mtrevisan.yeastcalculator.optimization.SimulationInputs;
-import io.github.mtrevisan.yeastcalculator.simulation.DoughContext;
-import io.github.mtrevisan.yeastcalculator.simulation.DoughOdeSystem;
-import io.github.mtrevisan.yeastcalculator.simulation.FoldEventHandler;
-import org.apache.commons.math3.analysis.UnivariateFunction;
-import org.apache.commons.math3.optim.MaxEval;
-import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
-import org.apache.commons.math3.optim.univariate.BrentOptimizer;
-import org.apache.commons.math3.optim.univariate.SearchInterval;
-import org.apache.commons.math3.optim.univariate.UnivariateObjectiveFunction;
-import org.apache.commons.math3.optim.univariate.UnivariateOptimizer;
-import org.apache.commons.math3.optim.univariate.UnivariatePointValuePair;
-import org.apache.commons.math3.ode.FirstOrderIntegrator;
-import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
-import org.apache.commons.math3.ode.sampling.StepHandler;
-import org.apache.commons.math3.ode.sampling.StepInterpolator;
 
+public class Main{
 
-/**
- * Orchestrator class acting as the primary entry point for the simulation program.
- * <p>
- * This class coordinates the execution by mapping environmental fields, launching
- * the continuous 6D Dormand-Prince differential solver loop, and packaging the metrics
- * into a Brent scalar optimizer to locate the exact mathematical ceiling for yeast dosing.
- * </p>
- */
-public final class Main{
-
-	private static final double YEAST_ABUSE_PENALTY_MULTIPLIER = 8.;
-	private static final double AMYLASE_ACCESSIBLE_SUGAR_OFFSET = 0.01;
-	private static final double MAX_SAFE_DRY_YEAST_LIMIT = 0.015;
-	private static final double MIN_DRY_YEAST_LIMIT = 0.0001;
-
-	/**
-	 * Clean, boilerplate-free data transfer container modeling optimized output dimensions.
-	 */
-	public record SimulationResult(
-		double optimalYeast,
-		double peakVolume,
-		double remainingSugar
-	){}
-
-	/**
-	 * GC-Friendly static StepHandler wrapper.
-	 * Eliminates high-frequency object allocations on the Heap inside optimization loops.
-	 */
-		private record DoughMetricsTracker(double[] metricsRef) implements StepHandler{
-
-		@Override
-			public void init(final double t0, final double[] y0, final double t){
-				this.metricsRef[0] = y0[0];
-				this.metricsRef[1] = y0[2];
-			}
-
-			@Override
-			public void handleStep(final StepInterpolator interpolator, final boolean isLast){
-				final double[] yInterp = interpolator.getInterpolatedState();
-				// Retain peak maximum volume expansion encountered over any integration step
-				if(yInterp[0] > this.metricsRef[0]){
-					this.metricsRef[0] = yInterp[0];
-				}
-				// Keep tracking active terminal simple carbohydrates remaining
-				this.metricsRef[1] = yInterp[2];
-			}
-
-	}
-
-
-	/**
-	 * CLI execution anchor method. Loads input models and logs structured baking results.
-	 */
 	public static void main(final String[] args){
-		final SimulationInputs inputs = new SimulationInputs();
-		final SimulationResult result = calculateOptimalYeast(inputs);
+		// Enforce dot formatting for clean metric output readings
+		Locale.setDefault(Locale.US);
 
-		System.out.printf(Locale.US, "Optimal Yeast    : %.2f%%%n", result.optimalYeast() * 100.);
-		System.out.printf(Locale.US, "Peak Volume Ratio: %.1f%n", result.peakVolume());
-		System.out.printf(Locale.US, "Remaining Sugar  : %.2f%%%n", result.remainingSugar() * 100.);
-	}
+		System.out.println("====================================================");
+		System.out.println("   BAKERY ODE ISOTHERM OPTIMIZATION ENGINE ENGINE   ");
+		System.out.println("====================================================\n");
 
-	/**
-	 * Configures environmental setups, defines target optimization curves,
-	 * and fires the numerical search algorithm.
-	 *
-	 * @param in	The unified SimulationInputs model instance.
-	 * @return	Configured SimulationResult containing optimal coordinates.
-	 */
-	public static SimulationResult calculateOptimalYeast(final SimulationInputs in){
-		// 1. Environmental & Material Setup via GAB Isotherms
-		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(in);
-		final double flourMoisture = gab.flourActiveWater + gab.flourStrictlyBoundWater;
-		final double totalWaterContent = (in.getDoughWater() + flourMoisture) / (1. + in.getDoughWater());
-
-		// 2. Timeline Aggregation
-		final StageInput[] stages = Arrays.stream(in.getStages())
-			.filter(s -> s != null && s.getDuration() > 0.)
-			.toArray(StageInput[]::new);
-		final double totalDuration = Arrays.stream(stages)
-			.mapToDouble(StageInput::getDuration)
-			.sum();
-		final double[] folds = (in.getFolds() == null? new double[0]: in.getFolds());
-
-		final double sugarInitial = in.getBlendedSugar() + AMYLASE_ACCESSIBLE_SUGAR_OFFSET;
-		final double effectiveAmylaseVMax = in.getEffectiveAmylaseVMax();
-		final BakeryProduct product = in.getTargetProduct();
-
-		// PHYSIOLOGY SETUP - Compute effective Q0 prior to continuous time zero integration
-		final double baseQ0 = YeastFermentationModel.calculateInitialQ0(in.getYeastMoisture());
-		final double effectiveQ0 = YeastFermentationModel.activeQAfterRehydration(baseQ0, in.getYeastRehydrationDuration());
-
-		// Preventive feasibility check of the lag time (Schedule Warning)
-		final double alphaBioStage1 = YeastFermentationModel.calculateThermalEfficiency(stages[0].getTemperature());
-		final double oilInhibitionStage1 = YeastFermentationModel.calculateOilInhibition(in.getDoughOil());
-
-		if(alphaBioStage1 > 0.){
-			// Lipid barriers physically delay cell wetting and enzyme mobilization (Gervais et al.)
-			final double estimatedLagHours = Math.log(1. + 1. / effectiveQ0)
-				/ (YeastFermentationModel.MU_MAX_REF * alphaBioStage1 * oilInhibitionStage1);
-
-			if(estimatedLagHours > 0.5 * totalDuration)
-				System.err.printf("⚠️ DIAGNOSTIC WARNING: Estimated yeast activation lag (%.2fh) consumes over 50%% of your timeline (%.2fh). Consider adding pre-hydration soaking or extending the schedule.%n",
-					estimatedLagHours, totalDuration);
-		}
-
-		// 3. Context packaging using direct safe public record constructor access
-		final DoughContext context = DoughContext.create(
-			stages, folds, totalDuration,
-			in.getHydratedStiffnessIndex(flourMoisture),
-			YeastFermentationModel.calculateSaltInhibition(in.getDoughSalt()),
-			YeastFermentationModel.calculateOilInhibition(in.getDoughOil()),
-			totalWaterContent, sugarInitial, effectiveAmylaseVMax
-		);
-
-		// 4. Optimization Engine Function Objective Blueprint
-		final UnivariateFunction structuralObjectiveFunction = yDry -> {
-			final double[] metrics = runDoughSimulation(yDry, context, product, effectiveQ0, in.getDoughMass());
-			final double peakVolume = metrics[0];
-			final double remainingSugar = metrics[1];
-
-			// Elastic structural failure threshold penalty
-			final double structuralTearingPenalty = (peakVolume > product.getGlutenTearingLimit()
-				? (peakVolume - product.getGlutenTearingLimit()) * product.getTearingPenaltyMultiplier()
-				: 0.);
-
-			// Chemical starch depletion safety barrier penalty
-			final double sugarStarvationPenalty = (remainingSugar < product.getMinSafeSugarThreshold()
-				? (product.getMinSafeSugarThreshold() - remainingSugar) * product.getStarvationPenaltyMultiplier()
-				: 0.);
-
-			final double yeastAbusePenalty = yDry * YEAST_ABUSE_PENALTY_MULTIPLIER;
-
-			// Returns unified performance score targeted for maximize loop routes
-			return peakVolume - structuralTearingPenalty - sugarStarvationPenalty - yeastAbusePenalty;
+		// 1. Definition of the Flour Blend
+		final double[] fractions = {1.};
+		final FlourInput[] flourMatrix = {
+			new FlourInput(295., 0.55, 0.013, 0.13, 0.011, 0.019, 0.003, FlourType.WHEAT)
 		};
 
-		// 5. Brent Search Execution Loop
-		final double yDryOptimal = executeBrentOptimization(structuralObjectiveFunction);
-		final double[] finalMetrics = runDoughSimulation(yDryOptimal, context, product, effectiveQ0, in.getDoughMass());
+		// 2. Structural & Storage baselines
+		final double flourTemperature = 19.;
+		final double airRelativeHumidity = 0.54;
 
-		final double peakVolume = finalMetrics[0];
-		final double remainingSugar = finalMetrics[1];
+		// 3. Yeast properties
+		final YeastInput yeastProps = new YeastInput(0.70, 5. / 60.);
 
-		// 6. Rescale dry biomass scalar back to real commercial wet yeast numbers
-		final double commercialYeast = yDryOptimal / (1. - in.getYeastMoisture());
-		return new SimulationResult(commercialYeast, peakVolume, remainingSugar);
-	}
-
-	/**
-	 * Configures and executes a single isolated continuous integration run of the 6D ODE network.
-	 */
-	private static double[] runDoughSimulation(final double yDry, final DoughContext ctx, final BakeryProduct product,
-			final double q0, final double doughMass){
-		final FirstOrderIntegrator integrator = new DormandPrince853Integrator(1e-6, ctx.getTotalDuration(),
-			1e-6, 1e-6);
-		if(ctx.getFolds().length > 0)
-			integrator.addEventHandler(new FoldEventHandler(ctx.getFolds()), 0.01, 1e-4, 100);
-
-		final double[] metrics = {1., ctx.getSugarInitial()};
-		integrator.addStepHandler(new DoughMetricsTracker(metrics));
-
-		// Boundary state vector initial conditions assignment array
-		// y[0] = 1 (Initial Volume)
-		// y[1] = 0 (calibrated dynamic physiological state Q0)
-		// y[2] = sugarInitial (Initial carbohydrate substrate pool)
-		// y[3] = 0 (Initial dissolved carbon dioxide concentration)
-		// y[4] = 0 (Initial macro-structural protein network degradation)
-		// y[5] = 101325. (Atmospheric/equilibrium basal micro-bubble gas pressure reference)
-		final double[] y = {1., q0, ctx.getSugarInitial(), 0., 0., 101325.};
-
-		final DoughOdeSystem ode = new DoughOdeSystem(yDry, ctx.getStages(), ctx.getStiffness(), ctx.getSaltK(),
-			ctx.getOilK(), ctx.getWaterContent(), ctx.getSugarInitial(), product.getGlutenTearingLimit(), doughMass,
-			ctx.getAmylaseVMax());
-		try{
-			integrator.integrate(ode, 0., y, ctx.getTotalDuration(), y);
-		}
-		catch(final Exception e){
-			// Severe error tracking escape coordinate
-			return new double[]{-100., 0.};
-		}
-		return metrics;
-	}
-
-	/**
-	 * Evaluates and returns the highest efficiency coordinate using univariate Brent searching.
-	 */
-	private static double executeBrentOptimization(final UnivariateFunction objectiveFunction){
-		final UnivariateOptimizer optimizer = new BrentOptimizer(1e-6, 1e-7);
-		final UnivariatePointValuePair optimizationResult = optimizer.optimize(
-			new MaxEval(150),
-			new UnivariateObjectiveFunction(objectiveFunction),
-			GoalType.MAXIMIZE,
-			new SearchInterval(MIN_DRY_YEAST_LIMIT, MAX_SAFE_DRY_YEAST_LIMIT)
+		// 4. Dough Recipe Configuration
+		final DoughRecipe recipe = new DoughRecipe(
+			0.60,	// Water Ratio
+			0.022,	// Salt Ratio
+			0.05,		// Oil Ratio
+			0.008,	// Malt Ratio
+			0.5,		// Malt Sugar content
+			80.,		// Diastatic power (Pollak Units)
+			3.			// Mixer Friction Factor
 		);
-		return optimizationResult.getPoint();
+
+		// 5. Mechanical Kneading profiles
+		final KneadingInput kneading = new KneadingInput(KneadingInput.KneadingType.MANUAL, 12.);
+
+		// 6. Multi-stage fermentation schedule
+		final StageInput[] stages = {
+			new StageInput(28., 0.55, 3.) // 3 hours at 28 degrees Celsius
+		};
+
+		// 7. Physical structural interventions (Stretch & Fold timestamps in hours)
+		final double[] folds = {0.75, 1.5}; // Folds execution at 45m and 90m
+
+		// Build composite simulation payload object
+		final SimulationInputs inputs = new SimulationInputs(
+			fractions, flourMatrix, flourTemperature, airRelativeHumidity,
+			yeastProps, recipe, kneading, stages, folds
+		);
+
+		// Target profile parameter definitions
+		final BakeryProduct selectedProduct = BakeryProduct.GASTRONOMY_PAN_PIZZA;
+
+		System.out.println("Selected Target Product: " + selectedProduct.name());
+		System.out.println("Processing optimization calculations via single-variable Brent inversion...");
+
+		// Execute Inversion Optimization Target Calculation
+		final double optimalYeastRatio = YeastOptimizer.findOptimalYeast(inputs, selectedProduct);
+
+		System.out.println("\nOptimization completed successfully.");
+		System.out.printf("Optimal Yeast Ratio Target Required: %.3f%% (relative to total flour)\n", optimalYeastRatio * 100.);
+
+		// Run confirmation simulation at target values to extract chemical endpoints
+		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(inputs);
+		final double maxGasPotential = YeastOptimizer.calculateMaxGasPotential(new double[]{295., 0.55, 0.011, 0.003},
+			inputs, selectedProduct);
+		final double[] finalState = YeastOptimizer.runSimulation(inputs, gab, maxGasPotential, optimalYeastRatio);
+
+		if(finalState != null){
+			System.out.println("\n--- FINAL DOUGH STATE AT TIMELINE EXPIRATION ---");
+			System.out.printf("Active Dry Yeast          : %.3f%%\n", finalState[0] * 100.);
+			System.out.printf("Residual Sugars Remaining : %.2f%%\n", finalState[1] * 100.);
+			System.out.printf("Final Retained Gas Volume : %.2f mL/g_flour\n", finalState[2]);
+
+			if(finalState[1] < selectedProduct.getMinSafeSugarThreshold())
+				System.out.println("WARNING: Sugar levels dropped below safe baking charts thresholds!");
+			else
+				System.out.println("Status: Sugar levels safely satisfied target baking requirement benchmarks.");
+		}
+		else
+			System.err.println("Critical Error: Core tracking verification integration run failed.");
 	}
 
 }

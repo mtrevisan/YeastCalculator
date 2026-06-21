@@ -1,197 +1,108 @@
 package io.github.mtrevisan.yeastcalculator.simulation;
 
-import io.github.mtrevisan.yeastcalculator.domain.StageInput;
-import io.github.mtrevisan.yeastcalculator.domain.YeastFermentationModel;
+import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
+import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
 import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
 
 
 /**
- * Core physical and biochemical integration engine modeling the dough as a
- * 6-Dimensional system of coupled non-linear First Order Differential Equations (ODEs).
- * <p>
- * State Vector Layout ($y$):
- * <ul>
- * <li>y[0]: Macro Volumetric Expansion Ratio ($V = \frac{V_t}{V_0}$)</li>
- * <li>y[1]: Lag Phase Enzymatic Adjustment State Coordinate ($\lambda$)</li>
- * <li>y[2]: Residual Simple Sugar Carbohydrate Substrate ($S$)</li>
- * <li>y[3]: Dissolved chemical $CO_2$ mass fraction pool ($C_{\text{aq}}$)</li>
- * <li>y[4]: Accumulated Macro-Structural Proteolytic Gluten Network Degradation Index ($D$)</li>
- * <li>y[5]: Micro-bubble Internal Volumetric Gas Pressure State ($P$)</li>
- * </ul>
- * </p>
- * <p>
- * This class accounts for non-linear physical interactions, including moisture syneresis,
- * ethanol-driven cell auto-intoxication, and progressive sigmoidal matrix permeability.
- * </p>
+ * System of equations applying the Rosso CTMI temperature function and enzymatic kinetics.
  */
-public final class DoughOdeSystem implements FirstOrderDifferentialEquations{
+public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
-	private static final double SECONDS_PER_HOUR = 3600.;
+	private static final double T_MIN = 2.;
+	private static final double T_OPT = 32.;
+	private static final double T_MAX = 43.;
 
+	private static final double K_S = 0.005;
+	private static final double Y_XS = 0.12;
+	private static final double MAINTENANCE_M = 0.01;
+	private static final double Y_VS = 350.;
 
-	private final double yDry;
-	private final StageInput[] stages;
-	private final double stiffnessIndexBase;
-	private final double saltK;
-	private final double oilK;
-	private final double waterContent;
-	private final double sugarInitial;
-	private final double glutenTearingLimit;
-	private final double doughMass;
-	private final double amylaseVMax;
-
-	// Domain Physical Constants
-	private static final double CO2_SATURATION_LIMIT = 0.0015;
-	private static final double CO2_DESORPTION_K = 12.5;
-	private static final double GAS_CONSTANT_R = 0.08206;
-	private static final double TEMPERATURE_KELVIN_OFFSET = 273.15;
-	private static final double STOICHIOMETRIC_CO2_YIELD = 0.48;
-
-	private static final double MIN_STIFFNESS_BOUND = 10.;
-
-	private static final double INITIAL_GAS_POROSITY = 0.05;
-
-	// Critical fermentation shutdown due to ethanol saturation (~6% mass fraction threshold)
-	private static final double ETHANOL_CRITICAL_LIMIT = 0.06;
+	private final double currentTemperature;
+	private final double activeWater;
+	private final double maxGasPotential;
+	private final SimulationInputs in;
+	private final FoldEventHandler foldHandler;
 
 
-	/**
-	 * Configures the multidimensional dynamic system variables.
-	 */
-	public DoughOdeSystem(final double yDry, final StageInput[] stages, final double stiffnessIndexBase,
-			final double saltK, final double oilK, final double waterContent, final double sugarInitial,
-			final double glutenTearingLimit, final double doughMass, final double amylaseVMax){
-		this.yDry = yDry;
-		this.stages = stages;
-		this.stiffnessIndexBase = stiffnessIndexBase;
-		this.saltK = saltK;
-		this.oilK = oilK;
-		this.waterContent = waterContent;
-		this.sugarInitial = sugarInitial;
-		this.glutenTearingLimit = glutenTearingLimit;
-		this.doughMass = doughMass;
-		this.amylaseVMax = amylaseVMax;
+	public DoughOdeSystem(final double currentTemperature, final double activeWater, final double maxGasPotential,
+			final SimulationInputs in, final FoldEventHandler foldHandler){
+		this.currentTemperature = currentTemperature;
+		this.activeWater = activeWater;
+		this.maxGasPotential = maxGasPotential;
+		this.in = in;
+		this.foldHandler = foldHandler;
 	}
 
 
 	@Override
 	public int getDimension(){
-		// y[0]=Volume, y[1]=Q (Baranyi state), y[2]=Sugar, y[3]=Dissolved CO2, y[4]=Gluten Degradation, y[5]=Internal Pressure
-		return 6;
+		return 3;
 	}
 
-	/**
-	 * Primary derivative computation loop executed by the numerical integrator step handlers.
-	 * Solves mass transfers, metabolic pathways, and viscoelastic expansions.
-	 */
 	@Override
 	public void computeDerivatives(final double t, final double[] y, final double[] yDot){
-		final double vCurr = y[0];
-		final double qCurr = y[1];
-		final double sugarCurr = y[2];
-		final double co2Dissolved = y[3];
-		final double glutenDegradation = y[4];
-		final double internalPressure = y[5];
+		final double x = Math.max(0., y[0]);
+		final double s = Math.max(0., y[1]);
+		final double vGas = Math.max(0., y[2]);
 
-		// 1. Environmental lookup mapping timeline coordinate 't' to its active stage
-		double stageStart = 0.;
-		double tCurr = stages[0].getTemperature();
-		double rhCurr = stages[0].getRelativeHumidity();
-		for(final StageInput stage : stages){
-			final double stageDuration = stage.getDuration();
-			if(t >= stageStart && t <= (stageStart + stageDuration)){
-				tCurr = stage.getTemperature();
-				rhCurr = stage.getRelativeHumidity();
-				break;
-			}
-			stageStart += stageDuration;
-		}
+		// 1. Dynamic mu_opt calculation influenced by ash (nutrients) of the flour mixture
+		double blendAsh = 0.;
+		final double[] fractions = in.getFractions();
+		final FlourInput[] matrix = in.getFlourMatrix();
+		for(int i = 0; i < matrix.length; i ++)
+			blendAsh += fractions[i] * matrix[i].getAsh();
+		// Ash/bran acts as a mineral growth booster (up to +15% mu_opt)
+		final double adjustedMuOpt = 0.45 * (1. + Math.min(0.15, blendAsh * 10.));
 
-		final double tClamped = Math.clamp(tCurr, 4., 45.);
+		// 2. Temperature Modifier (Rosso CTMI)
+		final double gammaT = calculateRossoGammaT(currentTemperature);
 
-		// 2. Thermodynamic Henry's law adjustment for dynamic CO2 fluid saturation limits
-		final double temperatureCorrection = Math.exp(2400. * (1. / (tClamped + TEMPERATURE_KELVIN_OFFSET) - 1. / 298.15));
-		final double dynamicSaturationLimit = CO2_SATURATION_LIMIT * temperatureCorrection * (1. + 0.5 * saltK);
+		// 3. Salt Inhibition Modifier
+		final double saltConcentration = (in.getRecipe().getWaterRatio() > 0.
+			? in.getRecipe().getSaltRatio() / in.getRecipe().getWaterRatio()
+			: 0.);
+		final double gammaSalt = Math.max(0., 1. - 4. * saltConcentration);
 
+		// 4. Water Activity Modifier
+		final double gammaWater = Math.min(1., activeWater / 0.14);
 
-		// 3. RHEOLOGY MODELLING - Syneresis: Damaged proteins release bound water, fluidizing the matrix
-		final double dynamicWaterContent = waterContent + 0.05 * glutenDegradation;
-		// Dynamic structural pH trajectory proxy: organic acid accumulation tracks sugar depletion
-		final double sugarConsumed = Math.max(0., sugarInitial - sugarCurr);
-		final double currentPH = 5.6 - 15. * sugarConsumed;
-		final double phProteaseMultiplier = 1. / (1. + Math.exp(4. * (currentPH - 5.)));
-		final double humidityDeficitFactor = Math.exp(-1.2 * (rhCurr - 1.));
+		// 5. ACTIVATION Dough Recipe.getOil Ratio (Membrane inhibitor effect on yeast)
+		// An excess of oil (e.g. > 5%) partially shields the cells by reducing the osmotic exchange
+		final double oilRatio = in.getRecipe().getOilRatio();
+		final double gammaOilInhibition = Math.max(0.7, 1. - (oilRatio * 1.2));
 
-		final double proteolysisRate = 0.0015 * Math.exp(0.08 * (tClamped - 20.));
-		// dDegradation/dt: tracks asymptotic protein structural decay pathway
-		yDot[4] = proteolysisRate * (1. - glutenDegradation) * phProteaseMultiplier;
+		// Combined effective growth kinetics
+		final double muEff = adjustedMuOpt * (s / (K_S + s)) * gammaT * gammaSalt * gammaWater * gammaOilInhibition;
 
-		// Hydrostatic load scale modifier: larger dough masses resist gas expansion
-		final double massScaleModifier = 1. + 0.08 * Math.log(doughMass);
-		final double dynamicStiffness = stiffnessIndexBase * humidityDeficitFactor * (1. - glutenDegradation)
-			* massScaleModifier;
+		// Cell mortality rate
+		final double kd = 0.01 + (s <= 0.? 0.05: 0.) + (currentTemperature >= T_MAX? 0.5: 0.);
 
-		// 4. Baranyi & Roberts differential physiological cell update
-		final double alphaBio = YeastFermentationModel.calculateThermalEfficiency(tClamped);
-		// Ethanol growth inhibition feedback loop (Ghose & Tyagi approach)
-		final double ethanolInhibitionFactor = Math.clamp(1. - (sugarConsumed / ETHANOL_CRITICAL_LIMIT), 0., 1.);
-		final double muBio = YeastFermentationModel.calculateBiomassGrowthRate(yDry, alphaBio, qCurr, sugarCurr,
-			saltK, oilK) * ethanolInhibitionFactor;
+		// Enzymatic production of sugars from malt
+		final double enzymeActivity = Math.max(0., (currentTemperature - T_MIN) / (T_OPT - T_MIN));
+		final double rMalt = 0.002 * in.getRecipe().getMaltRatio() * in.getRecipe().getMaltPollakUnit() * enzymeActivity;
 
-		// dQ/dt = mu_max_ref * alpha_thermal * Q. Environment-independent enzymatic engine.
-		yDot[1] = YeastFermentationModel.MU_MAX_REF * alphaBio * qCurr;
+		// --- APPLICATION OF DIFFERENTIAL EQUATIONS ---
+		yDot[0] = (muEff - kd) * x;
 
-		// 4. CARBOHYDRATE SUBSTRATE DEPLETION
-		// dSugar/dt
-		final double currentAmylaseVMax = amylaseVMax * alphaBio;
-		final double netSugarRatePerHour = YeastFermentationModel.calculateNetSugarRate(sugarCurr, muBio, yDry, tClamped,
-			currentAmylaseVMax);
-		yDot[2] = netSugarRatePerHour;
+		final double sugarConsumedByYeast = ((muEff / Y_XS) + MAINTENANCE_M) * x;
+		yDot[1] = rMalt - sugarConsumedByYeast;
 
-		// 5. GAS KINETICS - Separation of dissolved aqueous CO2 vs. gaseous pocket phase
-		// Pasteur transition effect tracking
-		final double anaerobicFactor = 1. - Math.exp(-30. * t);
-		final double sugarConsumedPerHour = muBio / 1.67 + 0.012 * yDry;
-		final double totalCo2ProductionRatePerHour = sugarConsumedPerHour * STOICHIOMETRIC_CO2_YIELD * anaerobicFactor
-			/ dynamicWaterContent;
-		final double co2DesorptionKPerHour = CO2_DESORPTION_K * SECONDS_PER_HOUR;
-		double gasDesorptionRatePerHour;
-		if(co2Dissolved > dynamicSaturationLimit){
-			gasDesorptionRatePerHour = co2DesorptionKPerHour * (co2Dissolved - dynamicSaturationLimit);
-			yDot[3] = totalCo2ProductionRatePerHour - gasDesorptionRatePerHour;
-		}
-		else{
-			yDot[3] = totalCo2ProductionRatePerHour;
-			gasDesorptionRatePerHour = 0.;
-		}
+		// Integrating retention efficiency with dynamic structural modifiers
+		final double dynamicMaxPotential = maxGasPotential * foldHandler.getCurrentGasPotentialModifier();
+		final double retentionEfficiency = Math.max(0., 1. - Math.pow(vGas / dynamicMaxPotential, 2.));
 
-		// 6. VISCOELASTIC VOLUMETRIC EXPANSION (Maxwell-like pneumatic work balance)
-		final double netGasVolume = (vCurr - 1.) + INITIAL_GAS_POROSITY;
-		final double gasDesorptionKgPerSecond = gasDesorptionRatePerHour / SECONDS_PER_HOUR;
-		// Ideal equilibrium reference pressure calculation
-		// 1200 is the indicative density of the mixture in kg/m^3
-		final double equilibriumPressure = 101325. + (gasDesorptionKgPerSecond * GAS_CONSTANT_R * (tClamped + TEMPERATURE_KELVIN_OFFSET)
-			/ (netGasVolume * (doughMass / 1200.)));
+		yDot[2] = Y_VS * sugarConsumedByYeast * retentionEfficiency;
+	}
 
-		// Dynamic mass relaxation pathway moving toward spatial pressure equilibrium
-		yDot[5] = 50 * (equilibriumPressure - internalPressure) * SECONDS_PER_HOUR;
+	private double calculateRossoGammaT(final double T){
+		if(T <= T_MIN || T >= T_MAX)
+			return 0.;
+		final double num = (T - T_MAX) * Math.pow(T - T_MIN, 2.);
 
-		if (gasDesorptionRatePerHour <= 0. && internalPressure <= 101325.)
-			yDot[0] = 0.;
-		else{
-			// Sigmoid continuous microstructural venting modeling membrane micro-cracking
-			final double matrixPermeabilityK = 1. / (1. + Math.exp(-12. * (vCurr - (glutenTearingLimit - 0.2))));
-			// normalized stiffness in MPa
-			final double internalPneumaticForce = (internalPressure - 101325.)
-				/ (StrictMath.max(MIN_STIFFNESS_BOUND, dynamicStiffness) * 1e6);
-			final double dVdtPerSecond = internalPneumaticForce * (1. - matrixPermeabilityK) * vCurr;
-			// Viscous mechanical expansion velocity response equation (dV/dt)
-			yDot[0] = dVdtPerSecond * SECONDS_PER_HOUR;
-		}
-
-		// 7. PROTEOLYTIC MATRIX DEGRADATION
-		final double proteolyticVMax = 0.00015 * (1. + 3. * (1. - saltK));
-		yDot[4] = proteolyticVMax * (tCurr / 32.);
+		final double den = (T_OPT - T_MIN) * ((T_OPT - T_MIN) * (T - T_OPT) - (T_OPT - T_MAX) * (T_OPT + T_MIN - 2. * T));
+		return (den == 0.? 0.: num / den);
 	}
 
 }

@@ -9,11 +9,11 @@ package io.github.mtrevisan.yeastcalculator.domain;
  * and biological kinetic equations during a specific segment of the dough's life cycle.
  * </p>
  */
-public final class StageInput{
+public class StageInput{
 
 	private final double temperature;
 	private final double relativeHumidity;
-	private final double durationHours;
+	private final double duration;
 
 
 	/**
@@ -21,12 +21,12 @@ public final class StageInput{
 	 *
 	 * @param temperature	The ambient temperature in Celsius [°C].
 	 * @param relativeHumidity	The ambient relative humidity as a decimal fraction [0.0, 1.0].
-	 * @param durationHours	The total duration of this specific stage in hours (>= 0.0).
+	 * @param duration	The total duration of this specific stage in hours (>= 0.0).
 	 */
-	public StageInput(final double temperature, final double relativeHumidity, final double durationHours){
+	public StageInput(final double temperature, final double relativeHumidity, final double duration){
 		this.temperature = temperature;
 		this.relativeHumidity = relativeHumidity;
-		this.durationHours = Math.max(0., durationHours);
+		this.duration = duration;
 	}
 
 
@@ -54,7 +54,7 @@ public final class StageInput{
 	 * @return	The duration in hours.
 	 */
 	public double getDuration(){
-		return durationHours;
+		return duration;
 	}
 
 }
