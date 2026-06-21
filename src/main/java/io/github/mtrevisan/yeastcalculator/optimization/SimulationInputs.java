@@ -24,12 +24,12 @@ public class SimulationInputs{
 
 	private final double doughMalt = 0.008;
 	private final double maltSugar = 0.5;
+	private final double maltPollakUnit = 1.;
 
 	// Pre-soak duration in warm water [hours]
 	private final double yeastRehydrationDuration = 5. / 60.;
 
 	private final double[] fractions = {1.};
-
 	private final FlourInput[] flourMatrix = {
 		new FlourInput(295., 0.55, 0.013, 0.13, 0.011, 0.019, 0.003, FlourType.WHEAT)
 	};
