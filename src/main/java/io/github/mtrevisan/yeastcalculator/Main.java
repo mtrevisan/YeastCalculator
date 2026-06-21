@@ -45,7 +45,7 @@ public class Main{
 			0.008,	// Malt Ratio
 			0.5,		// Malt Sugar content
 			80.,		// Diastatic power (Pollak Units)
-			3.			// Mixer Friction Factor
+			0.15		// Friction Factor
 		);
 
 		// 5. Mechanical Kneading profiles

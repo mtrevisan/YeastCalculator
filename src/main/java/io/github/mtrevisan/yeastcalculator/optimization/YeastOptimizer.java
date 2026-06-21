@@ -35,9 +35,9 @@ public class YeastOptimizer{
 				currentTime += stage.getDuration();
 
 			final FoldEventHandler foldHandler = new FoldEventHandler(in.getFolds());
-			final double[] yDotFinal = new double[3];
+			final double[] yDotFinal = new double[4];
 			final StageInput lastStage = in.getStages()[in.getStages().length - 1];
-			final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.getTemperature(), gab.flourActiveWater,
+			final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.getTemperature(), lastStage.getRelativeHumidity(),
 				baseMaxGasPotential, in, foldHandler);
 			finalOde.computeDerivatives(currentTime, y, yDotFinal);
 
@@ -83,7 +83,8 @@ public class YeastOptimizer{
 			totalFlourSugar += in.getFractions()[i] * in.getFlourMatrix()[i].getSugar();
 		final double initialS = totalFlourSugar + (in.getRecipe().getMaltRatio() * in.getRecipe().getMaltSugarContent());
 		final double initialV = 0.;
-		final double[] y = new double[]{initialX, initialS, initialV};
+		final double initialEtOH = 0.;
+		final double[] y = new double[]{initialX, initialS, initialV, initialEtOH};
 		double currentTime = 0.;
 
 		final FoldEventHandler foldHandler = new FoldEventHandler(in.getFolds());
