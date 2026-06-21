@@ -87,7 +87,7 @@ public class YeastOptimizer{
 		final FoldEventHandler foldHandler = new FoldEventHandler(in.getFolds());
 
 		for(final StageInput stage : in.getStages()){
-			final DoughOdeSystem ode = new DoughOdeSystem(stage.getTemperature(), gab.flourActiveWater,
+			final DoughOdeSystem ode = new DoughOdeSystem(stage.getTemperature(), stage.getRelativeHumidity(),
 				gab.flourActiveWater, baseMaxGasPotential, in, foldHandler);
 			final DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.e-4, 0.1,
 				1.e-5, 1.e-5);

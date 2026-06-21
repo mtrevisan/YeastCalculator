@@ -27,7 +27,8 @@ public class Main{
 		// 1. Definition of the Flour Blend
 		final double[] fractions = {1.};
 		final FlourInput[] flourMatrix = {
-			new FlourInput(295., 0.55, 0.013, 0.13, 0.011, 0.019, 0.003, FlourType.WHEAT)
+//			new FlourInput(295., 0.55, 0.013, 0.13, 0.011, 0.019, 0.003, FlourType.WHEAT)
+			new FlourInput(205., 0.523, 0.014, 0.12, 0.01, 0.017, 0.003, FlourType.WHEAT)
 		};
 
 		// 2. Structural & Storage baselines
@@ -39,25 +40,26 @@ public class Main{
 
 		// 4. Dough Recipe Configuration
 		final DoughRecipe recipe = new DoughRecipe(
-			0.60,	// Water Ratio
+			0.62,	// Water Ratio
 			0.022,	// Salt Ratio
-			0.05,		// Oil Ratio
-			0.008,	// Malt Ratio
+			0.07,		// Oil Ratio
+			0.012,	// Malt Ratio
 			0.5,		// Malt Sugar content
 			80.,		// Diastatic power (Pollak Units)
-			0.15		// Friction Factor
+			0.05		// Friction Factor
 		);
 
 		// 5. Mechanical Kneading profiles
-		final KneadingInput kneading = new KneadingInput(KneadingInput.KneadingType.MANUAL, 12.);
+		final KneadingInput kneading = new KneadingInput(KneadingInput.KneadingType.MANUAL, 15.);
 
 		// 6. Multi-stage fermentation schedule
 		final StageInput[] stages = {
-			new StageInput(28., 0.55, 1.)
+			new StageInput(24., 0.75, 4.),
+			new StageInput(30., 0.54, 1.5)
 		};
 
 		// 7. Physical structural interventions (Stretch & Fold timestamps in hours)
-		final double[] folds = {0.75, 1.5}; // Folds execution at 45m and 90m
+		final double[] folds = {0.5, 1., 1.5}; // Folds execution at 45m and 90m
 
 		// Build composite simulation payload object
 		final SimulationInputs inputs = new SimulationInputs(
@@ -69,13 +71,11 @@ public class Main{
 		final BakeryProduct selectedProduct = BakeryProduct.GASTRONOMY_PAN_PIZZA;
 
 		System.out.println("Selected Target Product: " + selectedProduct.name());
-		System.out.println("Processing optimization calculations via single-variable Brent inversion...");
 
 		// Execute Inversion Optimization Target Calculation
 		final double optimalYeastRatio = YeastOptimizer.findOptimalYeast(inputs, selectedProduct);
 
-		System.out.println("\nOptimization completed successfully.");
-		System.out.printf("Optimal Yeast Ratio Target Required: %.3f%% (relative to total flour)\n", optimalYeastRatio * 100.);
+		System.out.printf("Optimal Yeast Ratio Target Required: %.3f%%\n", optimalYeastRatio * 100.);
 
 		// Run confirmation simulation at target values to extract chemical endpoints
 		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(inputs);

@@ -16,10 +16,14 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	private static final double T_MAX = 43.;
 
 	// Biological constants for S. cerevisiae
-	private static final double AW_MIN = 0.88;       // Minimum aw limit for growth
-	private static final double ETHANOL_MAX = 0.06;  // Ethanol toxicity ceiling (~60 g/kg dough)
-	private static final double ETHANOL_N = 0.5;     // Ghose & Tyagi exponent
-	private static final double Y_ETHANOL_S = 0.48;  // Gay-Lussac yield (~48%)
+	// Minimum aw limit for growth
+	private static final double AW_MIN = 0.88;
+	// Ethanol toxicity ceiling (~60 g/kg dough)
+	private static final double ETHANOL_MAX = 0.06;
+	// Ghose & Tyagi exponent
+	private static final double ETHANOL_N = 0.5;
+	// Gay-Lussac yield (~48%)
+	private static final double Y_ETHANOL_S = 0.48;
 
 	private static final double K_S = 0.005;
 	private static final double Y_XS = 0.12;
