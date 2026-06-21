@@ -38,27 +38,24 @@ public class YeastOptimizer{
 			final double[] yDotFinal = new double[4];
 			final StageInput lastStage = in.getStages()[in.getStages().length - 1];
 			final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.getTemperature(), lastStage.getRelativeHumidity(),
-				baseMaxGasPotential, in, foldHandler);
+				gab.flourActiveWater, baseMaxGasPotential, in, foldHandler);
 			finalOde.computeDerivatives(currentTime, y, yDotFinal);
 
-			final double residualSugar = y[1];
-			double sugarPenalty = 0.;
-			if(residualSugar < targetProduct.getMinSafeSugarThreshold())
-				sugarPenalty = targetProduct.getStarvationPenaltyMultiplier() * 1000.
-					* (targetProduct.getMinSafeSugarThreshold() - residualSugar);
+			final double skinningModifier = (lastStage.getRelativeHumidity() >= 0.70
+				? 1.
+				: Math.max(0.6, 1. - (0.70 - lastStage.getRelativeHumidity()) * 0.8));
+			final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, in.getFolds().length) * skinningModifier;
 
-			// Tearing Penalty (if the volume derivative fluctuates violently or if we have gone too far beyond the plateau)
-			final double tearingPenalty = Math.abs(yDotFinal[2]) * targetProduct.getTearingPenaltyMultiplier();
-
-			return tearingPenalty + sugarPenalty;
+			// CLEAN ENCAPSULATION: Delegates the specific target cost to the selected product enum
+			return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1], yDotFinal[2]);
 		};
 
 		final BrentOptimizer optimizer = new BrentOptimizer(1.e-6, 1.e-6);
 		return optimizer.optimize(
-			new MaxEval(150),
+			new MaxEval(200),
 			new UnivariateObjectiveFunction(objective),
 			GoalType.MINIMIZE,
-			new SearchInterval(0.0005, 0.05)
+			new SearchInterval(0.0005, 0.035)
 		).getPoint();
 	}
 
@@ -91,7 +88,7 @@ public class YeastOptimizer{
 
 		for(final StageInput stage : in.getStages()){
 			final DoughOdeSystem ode = new DoughOdeSystem(stage.getTemperature(), gab.flourActiveWater,
-				baseMaxGasPotential, in, foldHandler);
+				gab.flourActiveWater, baseMaxGasPotential, in, foldHandler);
 			final DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.e-4, 0.1,
 				1.e-5, 1.e-5);
 			integrator.addEventHandler(foldHandler, 0.01, 1.e-4, 100);

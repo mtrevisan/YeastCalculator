@@ -53,7 +53,7 @@ public class Main{
 
 		// 6. Multi-stage fermentation schedule
 		final StageInput[] stages = {
-			new StageInput(28., 0.55, 3.) // 3 hours at 28 degrees Celsius
+			new StageInput(28., 0.55, 1.)
 		};
 
 		// 7. Physical structural interventions (Stretch & Fold timestamps in hours)
@@ -87,15 +87,77 @@ public class Main{
 			System.out.println("\n--- FINAL DOUGH STATE AT TIMELINE EXPIRATION ---");
 			System.out.printf("Active Dry Yeast          : %.3f%%\n", finalState[0] * 100.);
 			System.out.printf("Residual Sugars Remaining : %.2f%%\n", finalState[1] * 100.);
-			System.out.printf("Final Retained Gas Volume : %.2f mL/g_flour\n", finalState[2]);
+			System.out.printf("Final Retained Gas Volume : %.2f ml/g_flour\n", finalState[2]);
+			System.out.printf("Ethanol Accumulation      : %.2f g/kg_dough\n", finalState[3] * 1000.);
 
+			// Calculate total timeline execution hours
+			double totalDurationHours = 0.;
+			for(final StageInput stage : stages)
+				totalDurationHours += stage.getDuration();
+
+			// Execute the dynamic rheological evaluation
+			evaluateMaturationQuality(inputs, totalDurationHours);
+
+			// Execute Maillard / Sugar verification
+			System.out.println("\n--- BIOCHEMICAL DIAGNOSTICS ---");
 			if(finalState[1] < selectedProduct.getMinSafeSugarThreshold())
-				System.out.println("WARNING: Sugar levels dropped below safe baking charts thresholds!");
+				System.out.println("[CRITICAL] Sugar levels dropped below safe baking charts thresholds! Crust will bake pale.");
 			else
-				System.out.println("Status: Sugar levels safely satisfied target baking requirement benchmarks.");
+				System.out.println("[SUCCESS] Sugar levels safely satisfied target baking requirement benchmarks.");
 		}
 		else
 			System.err.println("Critical Error: Core tracking verification integration run failed.");
+	}
+
+	/**
+	 * Evaluates the structural and enzymatic maturation quality of the dough
+	 * based on flour strength (W), hydration ratio, and total process duration.
+	 * * @param inputs             The composite simulation payload containing flour and recipe data.
+	 *
+	 * @param totalDurationHours The cumulative duration of all fermentation stages.
+	 */
+	private static void evaluateMaturationQuality(final SimulationInputs inputs, final double totalDurationHours){
+		System.out.println("\n--- RHEOLOGICAL MATURATION DIAGNOSTICS ---");
+
+		// 1. Compute the weighted average of Flour Strength (W) from the blend
+		double blendW = 0.;
+		final double[] fractions = inputs.getFractions();
+		final FlourInput[] flourMatrix = inputs.getFlourMatrix();
+		for(int i = 0; i < fractions.length; i ++)
+			blendW += fractions[i] * flourMatrix[i].getStrength();
+
+		// 2. Estimate base required maturation hours at room temperature as a function of W
+		// Standard benchmark: A W300 flour requires roughly 6.0 hours at 24-28°C for full protease relaxation.
+		double estimatedRequiredHours = (blendW / 300.) * 6.;
+
+		// 3. Kinetic correction factor based on hydration (Water Ratio)
+		// Higher hydration increases enzymatic mobility (amylases/proteases), accelerating maturation.
+		final double waterRatio = inputs.getRecipe().getWaterRatio();
+		if(waterRatio >= 0.70)
+			// Accelerate by 15% due to high enzymatic diffusion
+			estimatedRequiredHours *= 0.85;
+		else if(waterRatio <= 0.55)
+			// Deccelerate by 15% due to high osmotic/viscous restriction
+			estimatedRequiredHours *= 1.15;
+
+		// 4. Structural evaluation and logging output
+		if(totalDurationHours < estimatedRequiredHours){
+			System.out.printf("[WARNING] Insufficient maturation window for this flour strength (W: %.0f).\n", blendW);
+			System.out.printf("          Required: ~%.1fh, Provided: %.1fh.\n", estimatedRequiredHours, totalDurationHours);
+			System.out.println("          Result: The gluten mesh will remain overly tense, causing high springback (elastic snap)");
+			System.out.println("                  and potential gas retention instability during stretching.");
+		}
+		else if(totalDurationHours > (estimatedRequiredHours * 2.5)){
+			System.out.printf("[WARNING] Excessive room-temperature maturation window detected for W: %.0f.\n", blendW);
+			System.out.printf("          Optimal window capped around ~%.1fh, Provided: %.1fh.\n", estimatedRequiredHours * 2., totalDurationHours);
+			System.out.println("          Result: Protease activity might over-degrade the gluten matrix structure,");
+			System.out.println("                  leading to a sticky, fragile dough prone to tearing.");
+		}
+		else{
+			System.out.printf("[SUCCESS] Maturation timeline (%.1fh) is well-proportioned for this blend (W: %.0f, Hydration: %.0f%%).\n",
+				totalDurationHours, blendW, waterRatio * 100.);
+			System.out.println("          Result: Optimal balance between gluten extensibility and gas holding matrix tenacity.");
+		}
 	}
 
 }

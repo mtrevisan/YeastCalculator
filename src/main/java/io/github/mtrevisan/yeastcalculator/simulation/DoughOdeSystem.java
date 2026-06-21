@@ -10,16 +10,16 @@ import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
  */
 public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
-	// Thermal cardinal parameters (Rosso et al., 1995)
+	// Cardinal temperature parameters (Rosso et al., 1995)
 	private static final double T_MIN = 2.;
 	private static final double T_OPT = 32.;
 	private static final double T_MAX = 43.;
 
-	// Biological constants from the literature for S. cerevisiae
+	// Biological constants for S. cerevisiae
 	private static final double AW_MIN = 0.88;       // Minimum aw limit for growth
-	private static final double ETHANOL_MAX = 0.06;  // Maximum ethanol tolerance (~60 g/kg dough)
-	private static final double ETHANOL_N = 0.5;     // Representative of Ghose & Tyagi
-	private static final double Y_ETHANOL_S = 0.48;  // Theoretical alcohol/sugar yield (Gay-Lussac ~48%)
+	private static final double ETHANOL_MAX = 0.06;  // Ethanol toxicity ceiling (~60 g/kg dough)
+	private static final double ETHANOL_N = 0.5;     // Ghose & Tyagi exponent
+	private static final double Y_ETHANOL_S = 0.48;  // Gay-Lussac yield (~48%)
 
 	private static final double K_S = 0.005;
 	private static final double Y_XS = 0.12;
@@ -28,15 +28,17 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 	private final double currentTemperature;
 	private final double currentStageRH;
+	private final double activeWater;
 	private final double maxGasPotential;
 	private final SimulationInputs in;
 	private final FoldEventHandler foldHandler;
 
 
-	public DoughOdeSystem(final double currentTemperature, final double currentStageRH, final double maxGasPotential,
-			final SimulationInputs in, final FoldEventHandler foldHandler){
+	public DoughOdeSystem(final double currentTemperature, final double currentStageRH, final double activeWater,
+			final double maxGasPotential, final SimulationInputs in, final FoldEventHandler foldHandler){
 		this.currentTemperature = currentTemperature;
 		this.currentStageRH = currentStageRH;
+		this.activeWater = activeWater;
 		this.maxGasPotential = maxGasPotential;
 		this.in = in;
 		this.foldHandler = foldHandler;
@@ -55,7 +57,7 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		final double vGas = Math.max(0., y[2]);
 		final double EtOH = Math.max(0., y[3]);
 
-		// --- 1. APPLICATION OF THE ROSS (1975) MODEL FOR WATER ACTIVITY (aw) ---
+		// --- 1. ROSS MODEL (1975) FOR WATER ACTIVITY (aw) ---
 		final double waterRatio = in.getRecipe().getWaterRatio();
 		final double saltRatio = in.getRecipe().getSaltRatio();
 
@@ -72,15 +74,15 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		final double awFlourBase = 0.96;
 		final double totalAw = Math.min(1., awFlourBase * awSalt);
 
-		// Inhibition by aw according to Rosso et al. (1995)
+		// Cardinal inhibition via aw (Rosso et al., 1995)
 		double gammaAw = 0.;
 		if(totalAw > AW_MIN)
 			gammaAw = (totalAw - AW_MIN) / (1. - AW_MIN);
 
-		// --- 2. ETHANOL INHIBITION (Ghose & Tyagi, 1979) ---
+		// --- 2. ETHANOL TOXICITY INHIBITION (Ghose & Tyagi, 1979) ---
 		double gammaEthanol = 1. - Math.pow(Math.min(1., EtOH / ETHANOL_MAX), ETHANOL_N);
 
-		// Mineral (Ash) and thermal (CTMI Red) modifier
+		// Ash (nutrient mineral boosting) & Temperature corrections
 		double blendAsh = 0.;
 		// Simplified to blend 100% in main
 		for(final FlourInput f : in.getFlourMatrix())
@@ -88,19 +90,23 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		final double adjustedMuOpt = 0.45 * (1. + Math.min(0.15, blendAsh * 10.));
 		final double gammaT = calculateRossoGammaT(currentTemperature);
 
-		// Combined effective growth kinetics
-		final double muEff = adjustedMuOpt * (s / (K_S + s)) * gammaT * gammaAw * gammaEthanol;
+		// Fat/Oil membrane screening penalty
+		final double oilRatio = in.getRecipe().getOilRatio();
+		final double gammaOilInhibition = Math.max(0.7, 1. - oilRatio * 1.2);
+
+		// Combined growth kinetic rate
+		final double muEff = adjustedMuOpt * (s / (K_S + s)) * gammaT * gammaAw * gammaEthanol * gammaOilInhibition;
 
 		final double speedYeastConsumption = ((muEff / Y_XS) + MAINTENANCE_M) * x;
 
 		// Cell mortality rate
 		final double kd = 0.01 + (s <= 0.? 0.05: 0.) + (currentTemperature >= T_MAX? 0.5: 0.);
 
-		// Enzymatic production of sugars from malt
+		// Diastatic malt sugar conversion rate
 		final double enzymeActivity = Math.max(0., (currentTemperature - T_MIN) / (T_OPT - T_MIN));
 		final double rMalt = 0.002 * in.getRecipe().getMaltRatio() * in.getRecipe().getMaltPollakUnit() * enzymeActivity;
 
-		// Component differential equations
+		// Differential Equations
 		// dX/dt
 		yDot[0] = (muEff - kd) * x;
 		// dS/dt
@@ -108,7 +114,7 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		// dEtOH/dt (Alcohol Accumulation)
 		yDot[3] = Y_ETHANOL_S * speedYeastConsumption;
 
-		// --- 3. GLUTEN FAILURE: BLOKSMA / CONSIDÈRE LOGISTICS SIGMOID ---
+		// --- 3. GLUTEN TEARING: BLOKSMA / CONSIDÈRE SIGMOID RETENTION ---
 		// Integrating retention efficiency with dynamic structural modifiers
 		final double skinningModifier = (currentStageRH >= 0.70 ? 1.: Math.max(0.6, 1. - (0.70 - currentStageRH) * 0.8));
 		final double dynamicMaxPotential = maxGasPotential * foldHandler.getCurrentGasPotentialModifier()
