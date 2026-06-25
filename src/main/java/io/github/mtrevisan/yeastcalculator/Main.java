@@ -39,13 +39,14 @@ public class Main{
 		final YeastInput yeastProps = new YeastInput(0.70, 5. / 60.);
 
 		// 4. Dough Recipe Configuration
+		final double maltSugarContent = 0.1;
 		final DoughRecipe recipe = new DoughRecipe(
 			0.62,	// Water Ratio
 			0.022,	// Salt Ratio
 			0.07,		// Oil Ratio
-			0.005,	// Malt Ratio
-			0.1,		// Malt Sugar content
-			15_000.,	// Diastatic power (Pollak Units)
+			0.009,	// Malt Ratio
+			maltSugarContent,
+			(15_000. / 110.) * (1. - maltSugarContent),	// Diastatic power
 			0.05		// Friction Factor
 		);
 
