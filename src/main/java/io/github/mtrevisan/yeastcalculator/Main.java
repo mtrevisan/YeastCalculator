@@ -43,9 +43,9 @@ public class Main{
 			0.62,	// Water Ratio
 			0.022,	// Salt Ratio
 			0.07,		// Oil Ratio
-			0.012,	// Malt Ratio
-			0.5,		// Malt Sugar content
-			80.,		// Diastatic power (Pollak Units)
+			0.005,	// Malt Ratio
+			0.1,		// Malt Sugar content
+			15_000.,	// Diastatic power (Pollak Units)
 			0.05		// Friction Factor
 		);
 
