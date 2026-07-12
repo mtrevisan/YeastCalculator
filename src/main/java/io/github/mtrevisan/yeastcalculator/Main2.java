@@ -20,10 +20,6 @@ public class Main2{
 		// Enforce dot formatting for clean metric output readings
 		Locale.setDefault(Locale.US);
 
-		System.out.println("====================================================");
-		System.out.println("   BAKERY ODE ISOTHERM OPTIMIZATION ENGINE ENGINE   ");
-		System.out.println("====================================================\n");
-
 		// 1. Definition of the Flour Blend
 		final double[] fractions = {1.};
 		final FlourInput[] flourMatrix = {

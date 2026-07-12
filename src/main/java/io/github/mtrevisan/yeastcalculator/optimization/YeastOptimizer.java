@@ -144,7 +144,7 @@ public class YeastOptimizer{
 			* lipidModifier;
 	}
 
-	private static double[] inputsSummary(final SimulationInputs in){
+	public static double[] inputsSummary(final SimulationInputs in){
 		double blendW = 0;
 		double blendFat = 0;
 		double blendAsh = 0;
