@@ -8,19 +8,23 @@ import io.github.mtrevisan.yeastcalculator.domain.KneadingInput;
 import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
 import io.github.mtrevisan.yeastcalculator.domain.StageInput;
 import io.github.mtrevisan.yeastcalculator.domain.YeastInput;
+import io.github.mtrevisan.yeastcalculator.optimization.GlobalMultivariateRecipeOptimizer;
 import io.github.mtrevisan.yeastcalculator.optimization.YeastOptimizer;
-import io.github.mtrevisan.yeastcalculator.simulation.DoughOdeSystem;
-import io.github.mtrevisan.yeastcalculator.simulation.FoldEventHandler;
 import io.github.mtrevisan.yeastcalculator.thermodynamic.GabMoistureModel;
 
 import java.util.Locale;
 
 
+/* Ingredient optimization */
 public class Main2{
 
 	public static void main(final String[] args){
 		// Enforce dot formatting for clean metric output readings
 		Locale.setDefault(Locale.US);
+
+		System.out.println("====================================================");
+		System.out.println("   BOBYQA MULTIVARIATE RECIPE OPTIMIZATION ENGINE   ");
+		System.out.println("====================================================\n");
 
 		// 1. Definition of the Flour Blend
 		final double[] fractions = {1.};
@@ -28,154 +32,121 @@ public class Main2{
 			new FlourInput(205., 0.523, 0.014, 0.12, 0.01, 0.017, 0.003, FlourType.WHEAT)
 		};
 
-		// 2. Structural & Storage baselines
+		// 2. Structural & Storage environmental baselines
 		final double flourTemperature = 19.;
 		final double airRelativeHumidity = 0.54;
 
 		// 3. Yeast properties
-		final YeastInput yeastProps = new YeastInput(0.70, 5. / 60.);
+		final double targetYeastMoisture = 0.70;
+		final double plannedRehydration = 12. / 60.;
+		final YeastInput yeastProps = new YeastInput(targetYeastMoisture, plannedRehydration);
 
 		// 4. Mechanical Kneading profiles
 		final KneadingInput kneading = new KneadingInput(KneadingInput.KneadingType.MANUAL, 15.);
 
 		// 5. Multi-stage fermentation schedule (Hard constraints set by user)
 		final StageInput[] stages = {
-			new StageInput(28., 0.75, 4.1)
+			new StageInput(28., 0.75, 4.1) // 4.1 hours warm maturation profile at 28 °C
 		};
 
 		// 6. Physical structural interventions (Stretch & Fold timestamps in hours)
 		final double[] folds = {0.5, 1., 1.5};
 
-		// Target profile parameter definitions
+		// 7. Establish the dynamic baseline context configuration
+		final double maltSugarContent = 0.1;
+		final DoughRecipe dummyBaseRecipe = new DoughRecipe(
+			0.62,   // Placeholder hydration
+			0.022,  // Placeholder salt
+			0.02,   // Placeholder oil
+			0.002,  // Placeholder malt
+			maltSugarContent,
+			(15_000. / 110.) * (1. - maltSugarContent), // Diastatic power baseline
+			0.05    // Mixer friction factor addition (°C)
+		);
+
+		final SimulationInputs initialInputs = new SimulationInputs(fractions, flourMatrix, flourTemperature,
+			airRelativeHumidity, yeastProps, dummyBaseRecipe, kneading, stages, folds);
+
+		// Target profile parameter definitions from your custom enum
 		final BakeryProduct selectedProduct = BakeryProduct.GASTRONOMY_PAN_PIZZA;
 		System.out.println("Selected Target Product: " + selectedProduct.name());
-		System.out.println("Scanning ingredient space for global biochemical & sensory optimum at 28 °C...");
+		// PRINT CALCULATED TIMELINE INSIGHTS PRIOR TO EXECUTING OPTIMIZATION RAMP
+		System.out.printf("Yeast Type Target Moisture : %.1f%%\n", targetYeastMoisture * 100.);
+		System.out.printf("Calculated Optimal Window  : %s\n", YeastOptimizer.getOptimalRehydrationWindow(targetYeastMoisture));
+		System.out.printf("Configured Input Window    : %.1f minutes\n", plannedRehydration * 60.);
+		System.out.println("Scanning multivariate space using BOBYQA Quadratic Interpolation Algorithms...\n");
 
-		// --- GRID SEARCH EXPLORATION SPACES ---
-		final double targetHydration = 0.62;
-		final double[] saltOptions = {0.018, 0.020, 0.022, 0.024, 0.026, 0.028, 0.030};
-		final double[] oilOptions = {0.010, 0.015, 0.020, 0.025, 0.030, 0.035, 0.040, 0.045, 0.050, 0.055, 0.060, 0.065, 0.070, 0.075, 0.080, 0.085, 0.090};
-		final double[] maltOptions = {0.000, 0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.010};
+		// --- EXECUTE THE MULTIVARIATE SEARCH OVER CONTINUOUS BOUNDS ---
+		final GlobalMultivariateRecipeOptimizer.OptimizedRecipeResult result =
+			GlobalMultivariateRecipeOptimizer.optimizeFullRecipe(initialInputs, selectedProduct);
 
-		double bestFitness = Double.MAX_VALUE;
-		DoughRecipe bestRecipe = null;
-		double bestYeastRatio = 0.;
-		double[] bestFinalState = null;
-
-		// Execute nested combinatorics scans
-		for(final double salt : saltOptions){
-			for(final double oil : oilOptions){
-				for(final double malt : maltOptions){
-
-					final DoughRecipe candidateRecipe = new DoughRecipe(targetHydration, salt, oil, malt, 0.5,
-						15_000., 0.05);
-
-					final SimulationInputs candidateInputs = new SimulationInputs(fractions, flourMatrix, flourTemperature,
-						airRelativeHumidity, yeastProps, candidateRecipe, kneading, stages, folds);
-
-					// Run the univariate optimization inside the grid loop
-					final double candidateYeast = YeastOptimizer.findOptimalYeast(candidateInputs, selectedProduct);
-
-					final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(candidateInputs);
-					final double[] finalState = YeastOptimizer.runSimulation(candidateInputs, gab, candidateYeast,
-						selectedProduct);
-
-					if(finalState == null)
-						continue;
-
-					// Extract structural parameters for internal enum fitness calculation
-					final double[] summary = YeastOptimizer.inputsSummary(candidateInputs);
-					final double baseMaxGasPotential = YeastOptimizer.calculateMaxGasPotential(summary, candidateInputs,
-						selectedProduct);
-
-					final StageInput lastStage = stages[stages.length - 1];
-					final double skinningModifier = (lastStage.getRelativeHumidity() >= 0.70
-						? 1.
-						: Math.max(0.6, 1. - (0.70 - lastStage.getRelativeHumidity()) * 0.8));
-					final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, folds.length) * skinningModifier;
-
-					// Reconstruct derivatives endpoint (yDot)
-					final double[] yDotFinal = new double[4];
-					double currentTime = 0.;
-					for(final StageInput stage : stages)
-						currentTime += stage.getDuration();
-
-					final FoldEventHandler foldHandler = new FoldEventHandler(folds);
-					final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.getTemperature(),
-						lastStage.getRelativeHumidity(), gab.flourActiveWater, baseMaxGasPotential, candidateInputs,
-						foldHandler);
-					finalOde.computeDerivatives(currentTime * 60., finalState, yDotFinal);
-
-					final double currentFitness = selectedProduct.computeFitness(finalState[2], dynamicMaxPotential,
-						finalState[1], finalState[0], yDotFinal[2]);
-
-					// Retain the absolute global minimum of the loss/fitness function
-					if(currentFitness < bestFitness){
-						bestFitness = currentFitness;
-						bestRecipe = candidateRecipe;
-						bestYeastRatio = candidateYeast;
-						bestFinalState = finalState;
-					}
-				}
-			}
-		}
-
-		// Build final optimized input payload for diagnostic logging
+		// Reconstruct final optimized input payload for validation and diagnostic logging
 		final SimulationInputs optimizedInputs = new SimulationInputs(fractions, flourMatrix, flourTemperature,
-			airRelativeHumidity, yeastProps, bestRecipe, kneading, stages, folds);
+			airRelativeHumidity, yeastProps, result.recipe(), kneading, stages, folds);
+
+		// Run final verification simulation at the optimum vector coordinate points
+		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(optimizedInputs);
+		final double[] finalState = YeastOptimizer.runSimulation(optimizedInputs, gab, result.optimalYeastRatio(),
+			selectedProduct);
 
 		// --- GLOBAL OPTIMIZATION REPORT DISPLAY ---
-		System.out.println("\n====================================================");
-		System.out.println("              GLOBAL OPTIMIZED RECIPE               ");
 		System.out.println("====================================================");
-		System.out.printf("Optimized Salt Ratio : %.2f%%\n", bestRecipe.getSaltRatio() * 100.);
-		System.out.printf("Optimized Oil Ratio  : %.2f%%\n", bestRecipe.getOilRatio() * 100.);
-		System.out.printf("Optimized Malt Ratio : %.2f%%\n", bestRecipe.getMaltRatio() * 100.);
-		System.out.printf("Optimal Starter Yeast: %.2f%%\n", bestYeastRatio * 100.);
-		System.out.printf("Global Fitness Score : %.4f\n", bestFitness);
+		System.out.println("           GLOBAL OPTIMIZED RECIPE                  ");
+		System.out.println("====================================================");
+		System.out.printf("Optimized Hydration  : %.2f%%\n", result.recipe().getWaterRatio() * 100.);
+		System.out.printf("Optimized Salt Ratio : %.2f%%\n", result.recipe().getSaltRatio() * 100.);
+		System.out.printf("Optimized Oil Ratio  : %.2f%%\n", result.recipe().getOilRatio() * 100.);
+		System.out.printf("Optimized Malt Ratio : %.2f%%\n", result.recipe().getMaltRatio() * 100.);
+		System.out.printf("Optimal Starter Yeast: %.4f%%\n", result.optimalYeastRatio() * 100.);
+		System.out.printf("Global Fitness Score : %.4f\n", result.finalFitness());
 
-		System.out.println("\n--- FINAL DOUGH STATE AT TIMELINE EXPIRATION ---");
-		System.out.printf("Yeast                : %.2f%%\n", bestFinalState[0] * 100.);
-		System.out.printf("Sugars               : %.2f%%\n", bestFinalState[1] * 100.);
-		System.out.printf("Retained Gas Volume  : %.1f ml/g_flour\n", bestFinalState[2]);
-		System.out.printf("Ethanol Accumulation : %.1f g/kg_dough\n", bestFinalState[3] * 1000.);
+		if(finalState != null){
+			System.out.println("\n--- FINAL DOUGH STATE AT TIMELINE EXPIRATION ---");
+			System.out.printf("Yeast (Active Matter): %.2f%%\n", finalState[0] * 100.);
+			System.out.printf("Sugars Remaining     : %.2f%%\n", finalState[1] * 100.);
+			System.out.printf("Retained Gas Volume  : %.1f ml/g_flour\n", finalState[2]);
+			System.out.printf("Ethanol Accumulation : %.1f g/kg_dough\n", finalState[3] * 1000.);
 
-		// Calculate total timeline execution hours
-		double totalDuration = 0.;
-		for(final StageInput stage : stages)
-			totalDuration += stage.getDuration();
+			// Calculate total timeline execution hours
+			double totalDuration = 0.;
+			for(final StageInput stage : stages)
+				totalDuration += stage.getDuration();
 
-		// Execute the dynamic rheological evaluation
-		evaluateMaturationQuality(optimizedInputs, totalDuration);
+			// Execute the dynamic rheological evaluation
+			evaluateMaturationQuality(optimizedInputs, totalDuration);
 
-		// Execute Biochemical & Sensory diagnostics
-		System.out.println("\n--- BIOCHEMICAL & SENSORY DIAGNOSTICS ---");
+			// Execute Biochemical & Sensory diagnostics
+			System.out.println("\n--- BIOCHEMICAL & SENSORY DIAGNOSTICS ---");
 
-		// 1. Maillard Reaction / Sugar Check
-		if(bestFinalState[1] < selectedProduct.getMinSafeSugarThreshold())
-			System.out.println("[CRITICAL] Sugar levels dropped below safe baking charts thresholds! Crust will bake pale.");
+			// 1. Maillard Reaction / Sugar Check
+			if(finalState[1] < selectedProduct.getMinSafeSugarThreshold())
+				System.out.println("[CRITICAL] Sugar levels dropped below safe baking charts thresholds! Crust will bake pale.");
+			else
+				System.out.println("[SUCCESS] Sugar levels safely satisfied target baking requirement benchmarks.");
+
+			// 2. Yeast Residue / Off-Flavor Check
+			final double finalYeastPercent = finalState[0] * 100.;
+			final double maxAllowedYeastPercent = selectedProduct.getMaxAllowedFinalYeast() * 100.;
+
+			if(finalState[0] > selectedProduct.getMaxAllowedFinalYeast()){
+				System.out.printf("[CRITICAL] Sensory Alert: Residual active yeast (%.2f%%) exceeds the off-flavor profile threshold (Max: %.2f%%) for %s.\n",
+					finalYeastPercent, maxAllowedYeastPercent, selectedProduct.name());
+				System.out.println("           Result: The final product will have a strong, pungent chemical/yeasty smell and taste.");
+			}
+			else if(finalState[0] >= (selectedProduct.getMaxAllowedFinalYeast() * 0.85)){
+				System.out.printf("[NOTICE] Pushing Sensory Limits: Residual active yeast (%.2f%%) is approaching the maximum allowed ceiling (%.2f%%).\n",
+					finalYeastPercent, maxAllowedYeastPercent);
+				System.out.println("         Result: Excellent oven-spring expected, but do not push the timeline any shorter to avoid taste degradation.");
+			}
+			else{
+				System.out.printf("[SUCCESS] Clean Sensory Profile: Residual active yeast (%.2f%%) is well within safe bounds (Max: %.2f%%).\n",
+					finalYeastPercent, maxAllowedYeastPercent);
+				System.out.println("         Result: Clean, traditional fermentation aroma without heavy yeasty overtones.");
+			}
+		}
 		else
-			System.out.println("[SUCCESS] Sugar levels safely satisfied target baking requirement benchmarks.");
-
-		// 2. Yeast Residue / Off-Flavor Check
-		final double finalYeastPercent = bestFinalState[0] * 100.;
-		final double maxAllowedYeastPercent = selectedProduct.getMaxAllowedFinalYeast() * 100.;
-
-		if(bestFinalState[0] > selectedProduct.getMaxAllowedFinalYeast()){
-			System.out.printf("[CRITICAL] Sensory Alert: Residual active yeast (%.2f%%) exceeds the off-flavor profile threshold (Max: %.2f%%) for %s.\n",
-				finalYeastPercent, maxAllowedYeastPercent, selectedProduct.name());
-			System.out.println("           Result: The final product will have a strong, pungent chemical/yeasty smell and taste.");
-		}
-		else if(bestFinalState[0] >= (selectedProduct.getMaxAllowedFinalYeast() * 0.85)){
-			System.out.printf("[NOTICE] Pushing Sensory Limits: Residual active yeast (%.2f%%) is approaching the maximum allowed ceiling (%.2f%%).\n",
-				finalYeastPercent, maxAllowedYeastPercent);
-			System.out.println("         Result: Excellent oven-spring expected, but do not push the timeline any shorter to avoid taste degradation.");
-		}
-		else{
-			System.out.printf("[SUCCESS] Clean Sensory Profile: Residual active yeast (%.2f%%) is well within safe bounds (Max: %.2f%%).\n",
-				finalYeastPercent, maxAllowedYeastPercent);
-			System.out.println("         Result: Clean, traditional fermentation aroma without heavy yeasty overtones.");
-		}
+			System.err.println("Critical Error: Core tracking verification integration run failed.");
+		System.out.println("====================================================");
 	}
 
 	/**
@@ -191,6 +162,7 @@ public class Main2{
 		for(int i = 0; i < fractions.length; i ++)
 			blendW += fractions[i] * flourMatrix[i].getStrength();
 
+		// [hours]
 		double estimatedRequired = (blendW / 300.) * 6.;
 
 		final double waterRatio = inputs.getRecipe().getWaterRatio();

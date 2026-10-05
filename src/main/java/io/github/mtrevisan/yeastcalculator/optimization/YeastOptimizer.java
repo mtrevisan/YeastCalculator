@@ -18,8 +18,24 @@ import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
 
 /**
  * Conducts bounded search algorithms to match yeast velocity targets to structural volume plateaus.
+ * Dynamically computes rehydration limits based on current cell moisture characteristics.
  */
 public class YeastOptimizer{
+
+	/**
+	 * Diagnostic utility to return the exact calculated optimal rehydration window bounds (in minutes).
+	 * @return An array containing [MinOptimalMinutes, MaxOptimalMinutes]
+	 */
+	public static double[] calculateOptimalRehydrationWindow(final double yeastMoisture){
+		if(yeastMoisture >= 0.65)
+			// Fresh yeast block: cells are already active. Optimal use is immediate (0 mins).
+			// Starvation stress triggers if floating in pure water without substrates for more than 15 mins.
+			return new double[]{0.0, 15.0};
+		else
+			// Dry mummified yeast: requires strict structural re-swelling time to protect cell walls.
+			// Optimal window is exactly between 9.6 minutes (0.16h) and 30 minutes (0.50h).
+			return new double[]{0.16 * 60.0, 0.50 * 60.0};
+	}
 
 	/**
 	 * Finds the optimal initial yeast ratio using a Brent Optimizer.
@@ -82,23 +98,38 @@ public class YeastOptimizer{
 		return runSimulation(in, gab, baseMaxGasPotential, yeastRatio);
 	}
 
+	/**
+	 * The core numerical orchestrator. Executes sequential integration blocks via Dormand-Prince 8(5,3).
+	 * Calculates the dynamic biological activation modifier as a direct function of cell moisture.
+	 */
 	private static double[] runSimulation(final SimulationInputs in, final GabMoistureModel.GabResult gab,
 			final double baseMaxGasPotential, final double yeastRatio){
-		// ACTIVATION YeastInput.getRehydrationDurationHours
-		// Calculation of biological efficiency based on rehydration time
-		// Optimal window assumed to be 10 minutes (0.166 hours). Below or above this window results in loss of cell viability.
-		final double rehydrHours = in.getYeastProperties().getRehydrationDurationHours();
+		final double rehydrationDuration = in.getYeastProperties().getRehydrationDurationHours();
+		final double yeastMoisture = in.getYeastProperties().getYeastMoisture();
 		double rehydrationEfficiencyModifier = 1.;
-		if(rehydrHours < 0.16)
-			// Penalty for failure to activate
-			rehydrationEfficiencyModifier = 0.7 + (rehydrHours / 0.16) * 0.3;
-		else if(rehydrHours > 0.5)
-			// Autolysis/Early Starvation in Water
-			rehydrationEfficiencyModifier = Math.max(0.5, 1. - (rehydrHours - 0.5) * 0.4);
+		if(yeastMoisture >= 0.65){
+			// --- FRESH YEAST PATHWAY (e.g., 70% moisture panetto) ---
+			// Cells are awake and active. If left floating in pure water without substrates for too long,
+			// autolysis and early starvation acceleration triggers.
+			// More than 15 minutes in pure water solvent matrix
+			if(rehydrationDuration > 0.25)
+				rehydrationEfficiencyModifier = Math.max(0.4, 1. - (rehydrationDuration - 0.25) * 0.8);
+		}
+		else{
+			// --- DEHYDRATED DRY YEAST PATHWAY (e.g., active dry yeast) ---
+			// Structural mummified cells require a rigid timeline to safely re-swell membrane proteins.
+			// Approx 9.6 minutes threshold limit
+			final double minRequiredHours = 0.16;
+			if(rehydrationDuration < minRequiredHours)
+				// Penalty for dry cell shear trauma
+				rehydrationEfficiencyModifier = 0.6 + (rehydrationDuration / minRequiredHours) * 0.4;
+			else if(rehydrationDuration > 0.5)
+				// Starvation envelope after 30 mins
+				rehydrationEfficiencyModifier = Math.max(0.5, 1. - (rehydrationDuration - 0.50) * 0.4);
+		}
 
 		// Set initial conditions for state variables: [Biomass X, Sugars S, Gas Volume V, Ethanol EtOH]
-		final double initialX = yeastRatio * (1. - in.getYeastProperties().getYeastMoisture())
-			* rehydrationEfficiencyModifier;
+		final double initialX = yeastRatio * (1. - yeastMoisture) * rehydrationEfficiencyModifier;
 
 		double totalFlourSugar = 0.;
 		for(int i = 0; i < in.getFlourMatrix().length; i ++)
@@ -181,6 +212,18 @@ public class YeastOptimizer{
 		final double blendPL = Math.exp(sumProductLnPL);
 
 		return new double[]{blendW, blendPL, blendFat, blendAsh};
+	}
+
+	/**
+	 * Calculates the optimal target rehydration duration range based on the moisture profile.
+	 *
+	 * @return A descriptive string indicating the unpenalized time window.
+	 */
+	public static String getOptimalRehydrationWindow(final double yeastMoisture){
+		if(yeastMoisture >= 0.65)
+			return "0 to 15 minutes (Instant mix recommended)";
+		else
+			return "10 to 30 minutes (Warm-water membrane rehydration mandatory)";
 	}
 
 }
