@@ -18,18 +18,41 @@ import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
 
 /**
  * Conducts bounded search algorithms to match yeast velocity targets to structural volume plateaus.
+ * Dynamically computes rehydration limits based on current cell moisture characteristics.
  */
 public class YeastOptimizer{
 
+	/**
+	 * Diagnostic utility to return the exact calculated optimal rehydration window bounds (in minutes).
+	 * @return An array containing [MinOptimalMinutes, MaxOptimalMinutes]
+	 */
+	public static double[] calculateOptimalRehydrationWindow(final double yeastMoisture){
+		if(yeastMoisture >= 0.65)
+			// Fresh yeast block: cells are already active. Optimal use is immediate (0 mins).
+			// Starvation stress triggers if floating in pure water without substrates for more than 15 mins.
+			return new double[]{0.0, 15.0};
+		else
+			// Dry mummified yeast: requires strict structural re-swelling time to protect cell walls.
+			// Optimal window is exactly between 9.6 minutes (0.16h) and 30 minutes (0.50h).
+			return new double[]{0.16 * 60.0, 0.50 * 60.0};
+	}
+
+	/**
+	 * Finds the optimal initial yeast ratio using a Brent Optimizer.
+	 */
 	public static double findOptimalYeast(final SimulationInputs in, final BakeryProduct targetProduct){
 		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(in);
 		final double baseMaxGasPotential = calculateMaxGasPotential(inputsSummary(in), in, targetProduct);
 
+		// The objective function defines the target for the optimizer to minimize
 		final UnivariateFunction objective = yeastAttempt -> {
+			// Run the ODE simulation using the current yeast attempt value
 			final double[] y = runSimulation(in, gab, baseMaxGasPotential, yeastAttempt);
+			// If the simulation crashed or hit a mathematical wall, return a maximum penalty score
 			if(y == null)
 				return Double.MAX_VALUE;
 
+			// Calculate total timeline execution
 			double currentTime = 0.;
 			for(final StageInput stage : in.getStages())
 				currentTime += stage.getDuration();
@@ -39,14 +62,15 @@ public class YeastOptimizer{
 			final StageInput lastStage = in.getStages()[in.getStages().length - 1];
 			final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.getTemperature(), lastStage.getRelativeHumidity(),
 				gab.flourActiveWater, baseMaxGasPotential, in, foldHandler);
-			finalOde.computeDerivatives(currentTime, y, yDotFinal);
+			finalOde.computeDerivatives(currentTime * 60., y, yDotFinal);
 
+			// Apply skinning and surface adjustments from the final ambient humidity
 			final double skinningModifier = (lastStage.getRelativeHumidity() >= 0.70
 				? 1.
 				: Math.max(0.6, 1. - (0.70 - lastStage.getRelativeHumidity()) * 0.8));
 			final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, in.getFolds().length) * skinningModifier;
 
-			// CLEAN ENCAPSULATION: Delegates the specific target cost to the selected product enum
+			// Delegates the specific cost target directly to your BakeryProduct enum structure
 			return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1] ,y[0], yDotFinal[2]);
 		};
 
@@ -55,6 +79,7 @@ public class YeastOptimizer{
 			new MaxEval(200),
 			new UnivariateObjectiveFunction(objective),
 			GoalType.MINIMIZE,
+			// Scans from 0.05% up to 3.5% fresh yeast fractions
 			new SearchInterval(0.0005, 0.035)
 		).getPoint();
 	}
@@ -73,21 +98,38 @@ public class YeastOptimizer{
 		return runSimulation(in, gab, baseMaxGasPotential, yeastRatio);
 	}
 
+	/**
+	 * The core numerical orchestrator. Executes sequential integration blocks via Dormand-Prince 8(5,3).
+	 * Calculates the dynamic biological activation modifier as a direct function of cell moisture.
+	 */
 	private static double[] runSimulation(final SimulationInputs in, final GabMoistureModel.GabResult gab,
 			final double baseMaxGasPotential, final double yeastRatio){
-		// ACTIVATION YeastInput.getRehydrationDurationHours
-		// Calculation of biological efficiency based on rehydration time
-		// Optimal window assumed to be 10 minutes (0.166 hours). Below or above this window results in loss of cell viability.
-		final double rehydrHours = in.getYeastProperties().getRehydrationDurationHours();
+		final double rehydrationDuration = in.getYeastProperties().getRehydrationDurationHours();
+		final double yeastMoisture = in.getYeastProperties().getYeastMoisture();
 		double rehydrationEfficiencyModifier = 1.;
-		if(rehydrHours < 0.16)
-			// Penalty for failure to activate
-			rehydrationEfficiencyModifier = 0.7 + (rehydrHours / 0.16) * 0.3;
-		else if(rehydrHours > 0.5)
-			// Autolysis/Early Starvation in Water
-			rehydrationEfficiencyModifier = Math.max(0.5, 1. - (rehydrHours - 0.5) * 0.4);
+		if(yeastMoisture >= 0.65){
+			// --- FRESH YEAST PATHWAY (e.g., 70% moisture panetto) ---
+			// Cells are awake and active. If left floating in pure water without substrates for too long,
+			// autolysis and early starvation acceleration triggers.
+			// More than 15 minutes in pure water solvent matrix
+			if(rehydrationDuration > 0.25)
+				rehydrationEfficiencyModifier = Math.max(0.4, 1. - (rehydrationDuration - 0.25) * 0.8);
+		}
+		else{
+			// --- DEHYDRATED DRY YEAST PATHWAY (e.g., active dry yeast) ---
+			// Structural mummified cells require a rigid timeline to safely re-swell membrane proteins.
+			// Approx 9.6 minutes threshold limit
+			final double minRequiredHours = 0.16;
+			if(rehydrationDuration < minRequiredHours)
+				// Penalty for dry cell shear trauma
+				rehydrationEfficiencyModifier = 0.6 + (rehydrationDuration / minRequiredHours) * 0.4;
+			else if(rehydrationDuration > 0.5)
+				// Starvation envelope after 30 mins
+				rehydrationEfficiencyModifier = Math.max(0.5, 1. - (rehydrationDuration - 0.50) * 0.4);
+		}
 
-		final double initialX = yeastRatio * (1. - in.getYeastProperties().getYeastMoisture()) * rehydrationEfficiencyModifier;
+		// Set initial conditions for state variables: [Biomass X, Sugars S, Gas Volume V, Ethanol EtOH]
+		final double initialX = yeastRatio * (1. - yeastMoisture) * rehydrationEfficiencyModifier;
 
 		double totalFlourSugar = 0.;
 		for(int i = 0; i < in.getFlourMatrix().length; i ++)
@@ -98,20 +140,25 @@ public class YeastOptimizer{
 		final double[] y = new double[]{initialX, initialS, initialV, initialEtOH};
 		double currentTime = 0.;
 
+		// Create the event handler to intercept stretch and fold timestamps
 		final FoldEventHandler foldHandler = new FoldEventHandler(in.getFolds());
 
 		for(final StageInput stage : in.getStages()){
 			final DoughOdeSystem ode = new DoughOdeSystem(stage.getTemperature(), stage.getRelativeHumidity(),
 				gab.flourActiveWater, baseMaxGasPotential, in, foldHandler);
+			// Variable-step size integrator setup
 			final DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.e-4, 0.1,
 				1.e-5, 1.e-5);
 			integrator.addEventHandler(foldHandler, 0.01, 1.e-4, 100);
 
-			final double stageEndTime = currentTime + stage.getDuration();
+			final double stageEndTime = currentTime + stage.getDuration() * 60.;
 			try{
+				// Execute numerical step integration
 				integrator.integrate(ode, currentTime, y, stageEndTime, y);
 			}
 			catch(final Exception e){
+				// If a severe arithmetic error (like an un-guarded division by zero) occurs,
+				// catch the exception and return null so the objective function applies a max penalty.
 				return null;
 			}
 			currentTime = stageEndTime;
@@ -165,6 +212,18 @@ public class YeastOptimizer{
 		final double blendPL = Math.exp(sumProductLnPL);
 
 		return new double[]{blendW, blendPL, blendFat, blendAsh};
+	}
+
+	/**
+	 * Calculates the optimal target rehydration duration range based on the moisture profile.
+	 *
+	 * @return A descriptive string indicating the unpenalized time window.
+	 */
+	public static String getOptimalRehydrationWindow(final double yeastMoisture){
+		if(yeastMoisture >= 0.65)
+			return "0 to 15 minutes (Instant mix recommended)";
+		else
+			return "10 to 30 minutes (Warm-water membrane rehydration mandatory)";
 	}
 
 }

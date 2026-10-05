@@ -89,12 +89,12 @@ public class Main{
 			System.out.printf("Ethanol Accumulation : %.1f g/kg_dough\n", finalState[3] * 1000.);
 
 			// Calculate total timeline execution hours
-			double totalDurationHours = 0.;
+			double totalDuration = 0.;
 			for(final StageInput stage : stages)
-				totalDurationHours += stage.getDuration();
+				totalDuration += stage.getDuration();
 
 			// Execute the dynamic rheological evaluation
-			evaluateMaturationQuality(inputs, totalDurationHours);
+			evaluateMaturationQuality(inputs, totalDuration);
 
 			// Execute Maillard / Sugar verification
 			System.out.println("\n--- BIOCHEMICAL & SENSORY DIAGNOSTICS ---");
@@ -131,9 +131,9 @@ public class Main{
 	 * based on flour strength (W), hydration ratio, and total process duration.
 	 * * @param inputs             The composite simulation payload containing flour and recipe data.
 	 *
-	 * @param totalDurationHours The cumulative duration of all fermentation stages.
+	 * @param totalDuration The cumulative duration of all fermentation stages.
 	 */
-	private static void evaluateMaturationQuality(final SimulationInputs inputs, final double totalDurationHours){
+	private static void evaluateMaturationQuality(final SimulationInputs inputs, final double totalDuration){
 		System.out.println("\n--- RHEOLOGICAL MATURATION DIAGNOSTICS ---");
 
 		// 1. Compute the weighted average of Flour Strength (W) from the blend
@@ -145,28 +145,28 @@ public class Main{
 
 		// 2. Estimate base required maturation hours at room temperature as a function of W
 		// Standard benchmark: A W300 flour requires roughly 6 hours at 24-28°C for full protease relaxation.
-		double estimatedRequiredHours = (blendW / 300.) * 6.;
+		double estimatedRequired = (blendW / 300.) * 6.;
 
 		// 3. Kinetic correction factor based on hydration (Water Ratio)
 		// Higher hydration increases enzymatic mobility (amylases/proteases), accelerating maturation.
 		final double waterRatio = inputs.getRecipe().getWaterRatio();
 		if(waterRatio >= 0.70)
 			// Accelerate by 15% due to high enzymatic diffusion
-			estimatedRequiredHours *= 0.85;
+			estimatedRequired *= 0.85;
 		else if(waterRatio <= 0.55)
 			// Deccelerate by 15% due to high osmotic/viscous restriction
-			estimatedRequiredHours *= 1.15;
+			estimatedRequired *= 1.15;
 
 		// 4. Structural evaluation and logging output
-		if(totalDurationHours < estimatedRequiredHours){
+		if(totalDuration < estimatedRequired){
 			System.out.printf("[WARNING] Insufficient maturation window for this flour strength (W: %.0f).\n", blendW);
-			System.out.printf("          Required: ~%.1fh, Provided: %.1fh.\n", estimatedRequiredHours, totalDurationHours);
+			System.out.printf("          Required: ~%.1fh, Provided: %.1fh.\n", estimatedRequired, totalDuration);
 			System.out.println("          Result: The gluten mesh will remain overly tense, causing high springback (elastic snap)");
 			System.out.println("                  and potential gas retention instability during stretching.");
 		}
-		else if(totalDurationHours > (estimatedRequiredHours * 2.5)){
+		else if(totalDuration > (estimatedRequired * 2.5)){
 			System.out.printf("[WARNING] Excessive room-temperature maturation window detected for W: %.0f.\n", blendW);
-			System.out.printf("          Optimal window capped around ~%.1fh, Provided: %.1fh.\n", estimatedRequiredHours * 2., totalDurationHours);
+			System.out.printf("          Optimal window capped around ~%.1fh, Provided: %.1fh.\n", estimatedRequired * 2., totalDuration);
 			System.out.println("          Result: Protease activity might over-degrade the gluten matrix structure,");
 			System.out.println("                  leading to a sticky, fragile dough prone to tearing.");
 		}

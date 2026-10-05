@@ -11,47 +11,69 @@ package io.github.mtrevisan.yeastcalculator.domain;
  * </p>
  */
 public enum BakeryProduct{
+
 	/**
 	 * NEAPOLITAN_PIZZA:
-	 * Low volume in the tray to preserve extensibility for manual stretching.
-	 * Lower sugar threshold because extreme baking temperatures (450 °C+)
-	 * will cause flash charring if residual sugars are too high.
-	 * Strict yeast limit (0.10%) to guarantee extreme lightness and prevent off-flavors in thin crusts.
+	 * Targets a relaxed, highly extensible gluten structure to prevent elastic snapback during manual stretching.
+	 * Can tolerate lower total gas volume (needs to stay within a flexible, workable envelope).
+	 * Requires strict retention of residual sugars to prevent flash charring in high-temperature ovens (450 °C+).
+	 * Strict yeast cell density caps to ensure a clean flavor profile in thin crusts.
 	 */
 	NEAPOLITAN_PIZZA(1.7, 0.009, 0.001, 25., 30.){
 		@Override
 		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
-			final double finalYeast, final double finalYeastDot){
-			// Pizza targets a relaxed dough structure (~60% of max potential)
-			final double targetVolume = maxPotential * 0.60;
-			final double volumeError = Math.abs(targetVolume - finalVolume) * getTearingPenaltyMultiplier();
+				final double finalYeast, final double finalYeastDot){
+			// Reconstruct the Bloksma polymer retention efficiency from DoughOdeSystem (kTear = 1.5)
+			final double kTear = 1.5;
+			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
 
+			// Neapolitan pizza targets an extensible, relaxed state (approx. 40% - 60% of max potential volume)
+			double rheologicalPenalty = 0.;
+			if(retentionEfficiency < 0.92)
+				// Heavily penalize if it enters the gas leakage phase (loses extensibility, tears during stretching)
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 120. * (0.92 - retentionEfficiency);
+			else if(finalVolume < (maxPotential * 0.35))
+				// Penalize if underproofed (dough will be too elastic and spring back)
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 15. * (maxPotential * 0.35 - finalVolume);
+
+			// Biochemical check: Protect sugars for high-heat browning control
 			double sugarPenalty = 0.;
 			if(residualSugar < getMinSafeSugarThreshold())
-				sugarPenalty = getStarvationPenaltyMultiplier() * 1000. * (getMinSafeSugarThreshold() - residualSugar);
+				sugarPenalty = getStarvationPenaltyMultiplier() * 1200. * (getMinSafeSugarThreshold() - residualSugar);
 
-			// Quadratic penalty for yeast accumulation exceeding sensory/structural benchmarks
+			// Sensory check: Avoid yeasty off-flavors
 			double offFlavorPenalty = 0.;
 			if(finalYeast > getMaxAllowedFinalYeast())
-				offFlavorPenalty = Math.pow((finalYeast - getMaxAllowedFinalYeast()) * 1000., 2.) * 100.;
+				offFlavorPenalty = Math.pow((finalYeast - getMaxAllowedFinalYeast()) * 1000., 2.) * 150.;
 
-			return volumeError + sugarPenalty + offFlavorPenalty;
+			// Kinetic check: Gas production rate should be stable and entering plateau
+			final double kineticPenalty = Math.abs(finalYeastDot) * 8.;
+
+			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
 		}
 	},
 
 	/**
-	 * PAN_PIZZA_ROMAN:
-	 * High hydration, large open alveoli. Maximum volume ceiling.
-	 * Medium-high sugar required to sustain longer baking charts at 250 °C.
-	 * Moderate yeast limit (0.20%) to tolerate intensive mechanical aeration without structural collapse.
+	 * ROMAN_PAN_PIZZA:
+	 * High hydration, large open alveoli structure. Pushes close to the structural threshold limit.
+	 * Requires maximizing volume while maintaining a stable gluten mesh to support heavy aeration.
+	 * Moderate yeast limit to tolerate intensive expansion without crumbling or structural collapse.
 	 */
 	ROMAN_PAN_PIZZA(2.2, 0.013, 0.002, 15., 45.){
 		@Override
 		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
-			final double finalYeast, final double finalYeastDot){
-			// Pan pizza targets higher volumetric development (~75% of max potential)
-			final double targetVolume = maxPotential * 0.75;
-			final double volumeError = Math.abs(targetVolume - finalVolume) * getTearingPenaltyMultiplier();
+				final double finalYeast, final double finalYeastDot){
+			final double kTear = 1.5;
+			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
+
+			// Roman pan pizza targets maximum structural development (approx. 65% - 80% of max potential volume)
+			double rheologicalPenalty = 0.;
+			if(retentionEfficiency < 0.82)
+				// Severe overproofing penalty: gas bubbles are merging, walls are thinning out, collapse imminent
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 150. * (0.82 - retentionEfficiency);
+			else if(finalVolume < (maxPotential * 0.55))
+				// Underproofing penalty: structure is dense, missing the classic open alveolar expansion
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 25. * (maxPotential * 0.55 - finalVolume);
 
 			double sugarPenalty = 0.;
 			if(residualSugar < getMinSafeSugarThreshold())
@@ -61,24 +83,34 @@ public enum BakeryProduct{
 			if(finalYeast > getMaxAllowedFinalYeast())
 				offFlavorPenalty = Math.pow((finalYeast - getMaxAllowedFinalYeast()) * 1000., 2.) * 100.;
 
-			return volumeError + sugarPenalty + offFlavorPenalty;
+			final double kineticPenalty = Math.abs(finalYeastDot) * 5.;
+
+			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
 		}
 	},
 
 	/**
-	 * GASTRONOMY_TEGLIA:
-	 * Spongy, soft, high-thickness crumb with small, uniform, dense bubble structures.
-	 * Controlled volume cap to prevent cell walls from thinning and merging into caves.
-	 * High-sugar residue target (1.5%) to feed the crumb during very long, gentle bake profiles (220 °C).
-	 * High yeast tolerance limit (0.30%) to sustain the heavy oil-loaded structural expansion.
+	 * GASTRONOMY_PAN_PIZZA:
+	 * Spongy, highly resilient, fine crumb layout.
+	 * Must optimize expansion to keep bubble structures uniform and prevent cells from merging into caverns.
+	 * High sugar buffer target to sustain long baking charts at 220 °C.
+	 * Higher yeast threshold tolerated due to the protective emulsifying effects of added oils/fats.
 	 */
 	GASTRONOMY_PAN_PIZZA(2., 0.015, 0.003, 20., 50.){
 		@Override
 		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
-			final double finalYeast, final double finalYeastDot){
-			// High-walled soft pan pizza targets high volume development (~80% of max potential)
-			final double targetVolume = maxPotential * 0.80;
-			final double volumeError = Math.abs(targetVolume - finalVolume) * getTearingPenaltyMultiplier();
+				final double finalYeast, final double finalYeastDot){
+			final double kTear = 1.5;
+			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
+
+			// Soft pan pizza targets highly uniform gas retention (approx. 60% - 75% of max potential volume)
+			double rheologicalPenalty = 0.;
+			if(retentionEfficiency < 0.85)
+				// Overproofed: Gluten walls are tearing, causing non-uniform large air pockets
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 130. * (0.85 - retentionEfficiency);
+			else if(finalVolume < (maxPotential * 0.45))
+				// Underproofed: The crumb will be overly dense, heavy, and lack soft sponginess
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 20. * (maxPotential * 0.45 - finalVolume);
 
 			double sugarPenalty = 0.;
 			if(residualSugar < getMinSafeSugarThreshold())
@@ -88,23 +120,34 @@ public enum BakeryProduct{
 			if(finalYeast > getMaxAllowedFinalYeast())
 				offFlavorPenalty = Math.pow((finalYeast - getMaxAllowedFinalYeast()) * 1000., 2.) * 100.;
 
-			return volumeError + sugarPenalty + offFlavorPenalty;
+			// Stability: Ensure the gas velocity curve has completely flattened out (plateau phase)
+			final double kineticPenalty = Math.abs(finalYeastDot) * 6.;
+
+			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
 		}
 	},
 
 	/**
 	 * BREAD:
-	 * Balanced freestanding three-dimensional expansion profile.
-	 * Requires structural elasticity reserves for scoring cuts and steam oven spring.
-	 * Strict yeast limit (0.15%) to avoid gas pocket channeling and uneven baking profiles.
+	 * Freestanding, three-dimensional balanced gas cell layout.
+	 * Must maintain high elastic retention reserves to handle oven-spring expansions and scoring expansions.
+	 * Strict kinetic constraints to prevent pocket channeling and uneven baking tunnels.
 	 */
 	BREAD(1.9, 0.012, 0.0015, 20., 40.){
 		@Override
 		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
-			final double finalYeast, final double finalYeastDot){
-			// Bread structural targeting aims close to maximum expansion (~85% of max potential)
-			final double targetVolume = maxPotential * 0.85;
-			final double volumeError = Math.abs(targetVolume - finalVolume) * getTearingPenaltyMultiplier();
+				final double finalYeast, final double finalYeastDot){
+			final double kTear = 1.5;
+			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
+
+			// Freestanding bread loaves target high retention reserves (approx. 70% - 82% of max potential volume)
+			double rheologicalPenalty = 0.;
+			if(retentionEfficiency < 0.88)
+				// Overproofed: Loaf will deflate or flat-line during scoring cuts or when hitting steam in the oven
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 140. * (0.88 - retentionEfficiency);
+			else if(finalVolume < (maxPotential * 0.50))
+				// Underproofed: Missing structural volume potential; dense core crumb expected
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 30. * (maxPotential * 0.50 - finalVolume);
 
 			double sugarPenalty = 0.;
 			if(residualSugar < getMinSafeSugarThreshold())
@@ -114,9 +157,10 @@ public enum BakeryProduct{
 			if(finalYeast > getMaxAllowedFinalYeast())
 				offFlavorPenalty = Math.pow((finalYeast - getMaxAllowedFinalYeast()) * 1000., 2.) * 100.;
 
-			// Stability check for structural loaf layout
-			final double stabilityPenalty = Math.abs(finalYeastDot) * 10.;
-			return volumeError + sugarPenalty + offFlavorPenalty + stabilityPenalty;
+			// Dynamic structural stabilization check for freestanding loaves
+			final double stabilityPenalty = Math.abs(finalYeastDot) * 12.;
+
+			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + stabilityPenalty;
 		}
 	};
 
@@ -128,7 +172,8 @@ public enum BakeryProduct{
 	private final double starvationPenaltyMultiplier;
 
 
-	BakeryProduct(final double vLimit, final double sLimit, final double yLimit, final double pTear, final double pStarve){
+	BakeryProduct(final double vLimit, final double sLimit, final double yLimit, final double pTear,
+			final double pStarve){
 		this.glutenTearingLimit = vLimit;
 		this.minSafeSugarThreshold = sLimit;
 		this.maxAllowedFinalYeast = yLimit;
