@@ -44,12 +44,12 @@ public class GlobalMultivariateRecipeOptimizer{
 		final double finalFitness = optimum.getValue();
 
 		final DoughRecipe finalRecipe = new DoughRecipe(optimizedPoints[0], optimizedPoints[1], optimizedPoints[2],
-			optimizedPoints[3], baseInputs.getRecipe().getMaltSugarContent(), baseInputs.getRecipe().getMaltPollakUnit(),
-			baseInputs.getRecipe().getMixerFrictionFactor());
+			optimizedPoints[3], baseInputs.recipe().maltSugarContent(), baseInputs.recipe().maltPollakUnit(),
+			baseInputs.recipe().mixerFrictionFactor());
 
-		final SimulationInputs finalInputs = new SimulationInputs(baseInputs.getFractions(), baseInputs.getFlourMatrix(),
-			baseInputs.getFlourTemperature(), baseInputs.getAirRelativeHumidity(), baseInputs.getYeastProperties(),
-			finalRecipe, baseInputs.getKneading(), baseInputs.getStages(), baseInputs.getFolds());
+		final SimulationInputs finalInputs = new SimulationInputs(baseInputs.fractions(), baseInputs.flourMatrix(),
+			baseInputs.flourTemperature(), baseInputs.airRelativeHumidity(), baseInputs.yeastProperties(),
+			finalRecipe, baseInputs.kneading(), baseInputs.stages(), baseInputs.folds());
 
 		// Find the absolute final synchronized optimal yeast dosage for the resolved recipe matrix
 		final double bestYeast = YeastOptimizer.findOptimalYeast(finalInputs, targetProduct);

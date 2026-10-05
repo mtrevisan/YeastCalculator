@@ -91,7 +91,7 @@ public class Main{
 			// Calculate total timeline execution hours
 			double totalDuration = 0.;
 			for(final StageInput stage : stages)
-				totalDuration += stage.getDuration();
+				totalDuration += stage.duration();
 
 			// Execute the dynamic rheological evaluation
 			evaluateMaturationQuality(inputs, totalDuration);
@@ -138,10 +138,10 @@ public class Main{
 
 		// 1. Compute the weighted average of Flour Strength (W) from the blend
 		double blendW = 0.;
-		final double[] fractions = inputs.getFractions();
-		final FlourInput[] flourMatrix = inputs.getFlourMatrix();
+		final double[] fractions = inputs.fractions();
+		final FlourInput[] flourMatrix = inputs.flourMatrix();
 		for(int i = 0; i < fractions.length; i ++)
-			blendW += fractions[i] * flourMatrix[i].getStrength();
+			blendW += fractions[i] * flourMatrix[i].strength();
 
 		// 2. Estimate base required maturation hours at room temperature as a function of W
 		// Standard benchmark: A W300 flour requires roughly 6 hours at 24-28°C for full protease relaxation.
@@ -149,7 +149,7 @@ public class Main{
 
 		// 3. Kinetic correction factor based on hydration (Water Ratio)
 		// Higher hydration increases enzymatic mobility (amylases/proteases), accelerating maturation.
-		final double waterRatio = inputs.getRecipe().getWaterRatio();
+		final double waterRatio = inputs.recipe().waterRatio();
 		if(waterRatio >= 0.70)
 			// Accelerate by 15% due to high enzymatic diffusion
 			estimatedRequired *= 0.85;

@@ -54,21 +54,21 @@ public class YeastOptimizer{
 
 			// Calculate total timeline execution
 			double currentTime = 0.;
-			for(final StageInput stage : in.getStages())
-				currentTime += stage.getDuration();
+			for(final StageInput stage : in.stages())
+				currentTime += stage.duration();
 
-			final FoldEventHandler foldHandler = new FoldEventHandler(in.getFolds());
+			final FoldEventHandler foldHandler = new FoldEventHandler(in.folds());
 			final double[] yDotFinal = new double[4];
-			final StageInput lastStage = in.getStages()[in.getStages().length - 1];
-			final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.getTemperature(), lastStage.getRelativeHumidity(),
+			final StageInput lastStage = in.stages()[in.stages().length - 1];
+			final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStage.relativeHumidity(),
 				gab.flourActiveWater, baseMaxGasPotential, in, foldHandler);
 			finalOde.computeDerivatives(currentTime * 60., y, yDotFinal);
 
 			// Apply skinning and surface adjustments from the final ambient humidity
-			final double skinningModifier = (lastStage.getRelativeHumidity() >= 0.70
+			final double skinningModifier = (lastStage.relativeHumidity() >= 0.70
 				? 1.
-				: Math.max(0.6, 1. - (0.70 - lastStage.getRelativeHumidity()) * 0.8));
-			final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, in.getFolds().length) * skinningModifier;
+				: Math.max(0.6, 1. - (0.70 - lastStage.relativeHumidity()) * 0.8));
+			final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, in.folds().length) * skinningModifier;
 
 			// Delegates the specific cost target directly to your BakeryProduct enum structure
 			return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1] ,y[0], yDotFinal[2]);
@@ -104,8 +104,8 @@ public class YeastOptimizer{
 	 */
 	private static double[] runSimulation(final SimulationInputs in, final GabMoistureModel.GabResult gab,
 			final double baseMaxGasPotential, final double yeastRatio){
-		final double rehydrationDuration = in.getYeastProperties().getRehydrationDurationHours();
-		final double yeastMoisture = in.getYeastProperties().getYeastMoisture();
+		final double rehydrationDuration = in.yeastProperties().rehydrationDurationHours();
+		final double yeastMoisture = in.yeastProperties().yeastMoisture();
 		double rehydrationEfficiencyModifier = 1.;
 		if(yeastMoisture >= 0.65){
 			// --- FRESH YEAST PATHWAY (e.g., 70% moisture panetto) ---
@@ -132,26 +132,26 @@ public class YeastOptimizer{
 		final double initialX = yeastRatio * (1. - yeastMoisture) * rehydrationEfficiencyModifier;
 
 		double totalFlourSugar = 0.;
-		for(int i = 0; i < in.getFlourMatrix().length; i ++)
-			totalFlourSugar += in.getFractions()[i] * in.getFlourMatrix()[i].getSugar();
-		final double initialS = totalFlourSugar + (in.getRecipe().getMaltRatio() * in.getRecipe().getMaltSugarContent());
+		for(int i = 0; i < in.flourMatrix().length; i ++)
+			totalFlourSugar += in.fractions()[i] * in.flourMatrix()[i].sugar();
+		final double initialS = totalFlourSugar + (in.recipe().maltRatio() * in.recipe().maltSugarContent());
 		final double initialV = 0.;
 		final double initialEtOH = 0.;
 		final double[] y = new double[]{initialX, initialS, initialV, initialEtOH};
 		double currentTime = 0.;
 
 		// Create the event handler to intercept stretch and fold timestamps
-		final FoldEventHandler foldHandler = new FoldEventHandler(in.getFolds());
+		final FoldEventHandler foldHandler = new FoldEventHandler(in.folds());
 
-		for(final StageInput stage : in.getStages()){
-			final DoughOdeSystem ode = new DoughOdeSystem(stage.getTemperature(), stage.getRelativeHumidity(),
+		for(final StageInput stage : in.stages()){
+			final DoughOdeSystem ode = new DoughOdeSystem(stage.temperature(), stage.relativeHumidity(),
 				gab.flourActiveWater, baseMaxGasPotential, in, foldHandler);
 			// Variable-step size integrator setup
 			final DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.e-4, 0.1,
 				1.e-5, 1.e-5);
 			integrator.addEventHandler(foldHandler, 0.01, 1.e-4, 100);
 
-			final double stageEndTime = currentTime + stage.getDuration() * 60.;
+			final double stageEndTime = currentTime + stage.duration() * 60.;
 			try{
 				// Execute numerical step integration
 				integrator.integrate(ode, currentTime, y, stageEndTime, y);
@@ -173,7 +173,7 @@ public class YeastOptimizer{
 		final double blendPL = summary[1];
 		final double blendFat = summary[2];
 		final double blendAsh = summary[3];
-		final double oilRatio = in.getRecipe().getOilRatio();
+		final double oilRatio = in.recipe().oilRatio();
 
 		// 1. An unbalanced P/L (> 0.6) stiffens the dough, reducing its ability to extend without tearing.
 		final double plModifier = (blendPL <= 0.5? 1.: Math.max(0.4, 1. - (blendPL - 0.5) * 0.8));
@@ -185,7 +185,7 @@ public class YeastOptimizer{
 		final double totalLipids = oilRatio + blendFat;
 		final double lipidModifier = 1. + (totalLipids <= 0.08? totalLipids * 1.5: 0.12 - (totalLipids - 0.08) * 2.);
 
-		final double kneadingEfficiency = in.getKneading().getType().getDevelopmentEfficiency();
+		final double kneadingEfficiency = in.kneading().type().getDevelopmentEfficiency();
 
 		return blendW * targetProduct.getGlutenTearingLimit() * 0.05 * kneadingEfficiency * plModifier * ashModifier
 			* lipidModifier;
@@ -197,15 +197,15 @@ public class YeastOptimizer{
 		double blendAsh = 0;
 		double sumProductLnPL = 0.;
 
-		final double[] fr = in.getFractions();
-		final FlourInput[] mx = in.getFlourMatrix();
+		final double[] fr = in.fractions();
+		final FlourInput[] mx = in.flourMatrix();
 
 		for(int i = 0; i < mx.length; i ++){
-			blendW += fr[i] * mx[i].getStrength();
-			blendFat += fr[i] * mx[i].getFat();
-			blendAsh += fr[i] * mx[i].getAsh();
+			blendW += fr[i] * mx[i].strength();
+			blendFat += fr[i] * mx[i].fat();
+			blendAsh += fr[i] * mx[i].ash();
 
-			final double pl = mx[i].getPlRatio();
+			final double pl = mx[i].plRatio();
 			if(pl > 0)
 				sumProductLnPL += fr[i] * Math.log(pl);
 		}

@@ -65,8 +65,8 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		final double EtOH = Math.max(0., y[3]);
 
 		// --- 1. ROSS MODEL (1975) FOR WATER ACTIVITY (aw) ---
-		final double waterRatio = in.getRecipe().getWaterRatio();
-		final double saltRatio = in.getRecipe().getSaltRatio();
+		final double waterRatio = in.recipe().waterRatio();
+		final double saltRatio = in.recipe().saltRatio();
 
 		// Molality of salt (moles of NaCl per kg of water in the mixture)
 		final double molesSalt = saltRatio / 58.44;
@@ -91,13 +91,13 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 		// Mineral/Ash nutrient boosting scaling
 		double blendAsh = 0.;
-		for(final FlourInput f : in.getFlourMatrix())
-			blendAsh += f.getAsh();
+		for(final FlourInput f : in.flourMatrix())
+			blendAsh += f.ash();
 		final double adjustedMuOpt = BASE_MU_OPT * (1. + Math.min(0.25, blendAsh * 15.));
 		final double gammaT = calculateRossoGammaT(currentTemperature);
 
 		// Fat/Oil membrane screening penalty
-		final double oilRatio = in.getRecipe().getOilRatio();
+		final double oilRatio = in.recipe().oilRatio();
 		final double gammaOilInhibition = 1. / (1. + 2.5 * oilRatio);
 
 		// Combined growth kinetic rate
@@ -111,7 +111,7 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		// Diastatic malt sugar conversion rate
 		final double enzymeActivity = Math.max(0., (currentTemperature - T_MIN) / (T_OPT - T_MIN));
 		final double sugarSaturationModifier = Math.max(0., 1. - s / 0.04);
-		final double rMalt = 0.002 * in.getRecipe().getMaltRatio() * in.getRecipe().getMaltPollakUnit() * enzymeActivity * sugarSaturationModifier;
+		final double rMalt = 0.002 * in.recipe().maltRatio() * in.recipe().maltPollakUnit() * enzymeActivity * sugarSaturationModifier;
 
 		// Calculate derivatives
 		double dX_dt = (muEff - kd) * x;

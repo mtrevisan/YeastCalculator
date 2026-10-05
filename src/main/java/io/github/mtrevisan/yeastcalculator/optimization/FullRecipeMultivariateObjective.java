@@ -35,13 +35,13 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 
 		// Construct the candidate recipe payload
 		final DoughRecipe candidateRecipe = new DoughRecipe(hydration, salt, oil, malt,
-			baseInputs.getRecipe().getMaltSugarContent(), baseInputs.getRecipe().getMaltPollakUnit(),
-			baseInputs.getRecipe().getMixerFrictionFactor());
+			baseInputs.recipe().maltSugarContent(), baseInputs.recipe().maltPollakUnit(),
+			baseInputs.recipe().mixerFrictionFactor());
 
-		final SimulationInputs candidateInputs = new SimulationInputs(baseInputs.getFractions(),
-			baseInputs.getFlourMatrix(), baseInputs.getFlourTemperature(), baseInputs.getAirRelativeHumidity(),
-			baseInputs.getYeastProperties(), candidateRecipe, baseInputs.getKneading(), baseInputs.getStages(),
-			baseInputs.getFolds());
+		final SimulationInputs candidateInputs = new SimulationInputs(baseInputs.fractions(),
+			baseInputs.flourMatrix(), baseInputs.flourTemperature(), baseInputs.airRelativeHumidity(),
+			baseInputs.yeastProperties(), candidateRecipe, baseInputs.kneading(), baseInputs.stages(),
+			baseInputs.folds());
 
 		// 1. Solve the nested univariate problem for the optimal yeast target fraction
 		final double optimalYeast = YeastOptimizer.findOptimalYeast(candidateInputs, targetProduct);
@@ -58,21 +58,21 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 		final double[] summary = YeastOptimizer.inputsSummary(candidateInputs);
 		final double baseMaxGasPotential = YeastOptimizer.calculateMaxGasPotential(summary, candidateInputs,
 			targetProduct);
-		final StageInput lastStage = baseInputs.getStages()[baseInputs.getStages().length - 1];
+		final StageInput lastStage = baseInputs.stages()[baseInputs.stages().length - 1];
 
-		final double skinningModifier = (lastStage.getRelativeHumidity() >= 0.70
+		final double skinningModifier = (lastStage.relativeHumidity() >= 0.70
 			? 1.
-			: Math.max(0.6, 1. - (0.70 - lastStage.getRelativeHumidity()) * 0.8));
-		final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, baseInputs.getFolds().length)
+			: Math.max(0.6, 1. - (0.70 - lastStage.relativeHumidity()) * 0.8));
+		final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, baseInputs.folds().length)
 			* skinningModifier;
 
 		double[] yDotFinal = new double[4];
 		double currentTime = 0.;
-		for(StageInput stage : baseInputs.getStages())
-			currentTime += stage.getDuration();
+		for(StageInput stage : baseInputs.stages())
+			currentTime += stage.duration();
 
-		final FoldEventHandler foldHandler = new FoldEventHandler(baseInputs.getFolds());
-		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.getTemperature(), lastStage.getRelativeHumidity(),
+		final FoldEventHandler foldHandler = new FoldEventHandler(baseInputs.folds());
+		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStage.relativeHumidity(),
 			gab.flourActiveWater, baseMaxGasPotential, candidateInputs, foldHandler);
 		finalOde.computeDerivatives(currentTime * 60., finalState, yDotFinal);
 
