@@ -3,30 +3,21 @@ package io.github.mtrevisan.yeastcalculator.domain;
 
 /**
  * Handles hydration and processing traits of the specific biological leavening agent.
+ *
+ * @param yeastMoisture            [g_water / g_wet_yeast]
+ * @param rehydrationDurationHours Rehydration window before mixing
  */
-public class YeastInput{
-
+public record YeastInput(
 	// [g_water / g_wet_yeast]
-	private final double yeastMoisture;
+	double yeastMoisture,
 	// Rehydration window before mixing
-	private final double rehydrationDurationHours;
+	double rehydrationDurationHours){
 
 
-	public YeastInput(final double yeastMoisture, final double rehydrationDurationHours){
+	public YeastInput{
 		if(yeastMoisture < 0. || yeastMoisture > 1.)
 			throw new IllegalArgumentException("Yeast moisture must be a fraction between 0 and 1");
-
-		this.yeastMoisture = yeastMoisture;
-		this.rehydrationDurationHours = rehydrationDurationHours;
 	}
 
-
-	public double getYeastMoisture(){
-		return yeastMoisture;
-	}
-
-	public double getRehydrationDurationHours(){
-		return rehydrationDurationHours;
-	}
 
 }

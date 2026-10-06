@@ -87,10 +87,10 @@ public class Main2{
 		System.out.println("====================================================");
 		System.out.println("           GLOBAL OPTIMIZED RECIPE                  ");
 		System.out.println("====================================================");
-		System.out.printf("Optimized Hydration  : %.2f%%\n", result.recipe().getWaterRatio() * 100.);
-		System.out.printf("Optimized Salt Ratio : %.2f%%\n", result.recipe().getSaltRatio() * 100.);
-		System.out.printf("Optimized Oil Ratio  : %.2f%%\n", result.recipe().getOilRatio() * 100.);
-		System.out.printf("Optimized Malt Ratio : %.2f%%\n", result.recipe().getMaltRatio() * 100.);
+		System.out.printf("Optimized Hydration  : %.2f%%\n", result.recipe().waterRatio() * 100.);
+		System.out.printf("Optimized Salt Ratio : %.2f%%\n", result.recipe().saltRatio() * 100.);
+		System.out.printf("Optimized Oil Ratio  : %.2f%%\n", result.recipe().oilRatio() * 100.);
+		System.out.printf("Optimized Malt Ratio : %.2f%%\n", result.recipe().maltRatio() * 100.);
 		System.out.printf("Optimal Starter Yeast: %.4f%%\n", result.optimalYeastRatio() * 100.);
 		System.out.printf("Global Fitness Score : %.4f\n", result.finalFitness());
 
@@ -104,7 +104,7 @@ public class Main2{
 			// Calculate total timeline execution hours
 			double totalDuration = 0.;
 			for(final StageInput stage : stages)
-				totalDuration += stage.getDuration();
+				totalDuration += stage.duration();
 
 			// Execute the dynamic rheological evaluation
 			evaluateMaturationQuality(optimizedInputs, totalDuration);
@@ -151,15 +151,15 @@ public class Main2{
 		System.out.println("\n--- RHEOLOGICAL MATURATION DIAGNOSTICS ---");
 
 		double blendW = 0.;
-		final double[] fractions = inputs.getFractions();
-		final FlourInput[] flourMatrix = inputs.getFlourMatrix();
+		final double[] fractions = inputs.fractions();
+		final FlourInput[] flourMatrix = inputs.flourMatrix();
 		for(int i = 0; i < fractions.length; i ++)
-			blendW += fractions[i] * flourMatrix[i].getStrength();
+			blendW += fractions[i] * flourMatrix[i].strength();
 
 		// [hours]
 		double estimatedRequired = (blendW / 300.) * 6.;
 
-		final double waterRatio = inputs.getRecipe().getWaterRatio();
+		final double waterRatio = inputs.recipe().waterRatio();
 		if(waterRatio >= 0.70)
 			estimatedRequired *= 0.85;
 		else if(waterRatio <= 0.55)

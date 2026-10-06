@@ -25,8 +25,8 @@ public class GabMoistureModel{
 
 
 	public static GabResult calculateMoisture(final SimulationInputs in){
-		final double[] fractionsRaw = in.getFractions();
-		final FlourInput[] flourMatrix = in.getFlourMatrix();
+		final double[] fractionsRaw = in.fractions();
+		final FlourInput[] flourMatrix = in.flourMatrix();
 		final int numFlours = flourMatrix.length;
 
 		double totalRawAmount = 0.;
@@ -43,14 +43,14 @@ public class GabMoistureModel{
 		final double[] dryMassComponent = new double[numFlours];
 		double totalDryMassComponent = 0.;
 
-		final double aw = clamp(in.getAirRelativeHumidity(), 0.1, 0.95);
-		final double temperatureCoeff = 1. - 0.0025 * (in.getFlourTemperature() - 20.);
+		final double aw = clamp(in.airRelativeHumidity(), 0.1, 0.95);
+		final double temperatureCoeff = 1. - 0.0025 * (in.flourTemperature() - 20.);
 
 		for(int i = 0; i < numFlours; i ++){
 			final FlourInput flour = flourMatrix[i];
-			final FlourType type = flour.getType();
+			final FlourType type = flour.type();
 
-			wmDB[i] = type.getWmBase() + (0.085 * flour.getProtein()) + (0.12 * flour.getFiber());
+			wmDB[i] = type.getWmBase() + (0.085 * flour.protein()) + (0.12 * flour.fiber());
 			final double tmp = type.getkGab() * aw;
 			final double uEquilibriumDB = (wmDB[i] * type.getcGab() * tmp)
 				/ ((1. - tmp) * (1. + (type.getcGab() - 1.) * tmp));

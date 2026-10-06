@@ -4,7 +4,10 @@ package io.github.mtrevisan.yeastcalculator.domain;
 /**
  * Describes mechanical parameters defining the matrix development profile.
  */
-public class KneadingInput{
+public record KneadingInput(
+	KneadingType type,
+	double durationMinutes){
+
 
 	public enum KneadingType{
 		MANUAL(0.1, 0.4),
@@ -27,25 +30,6 @@ public class KneadingInput{
 		public double getDevelopmentEfficiency(){
 			return developmentEfficiency;
 		}
-	}
-
-
-	private final KneadingType type;
-	private final double durationMinutes;
-
-
-	public KneadingInput(KneadingType type, double durationMinutes){
-		this.type = type;
-		this.durationMinutes = durationMinutes;
-	}
-
-
-	public KneadingType getType(){
-		return type;
-	}
-
-	public double getDurationMinutes(){
-		return durationMinutes;
 	}
 
 }
