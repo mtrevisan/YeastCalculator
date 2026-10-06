@@ -59,7 +59,8 @@ public class Main{
 		};
 
 		// 7. Physical structural interventions (Stretch & Fold timestamps in hours)
-		final double[] folds = {0.5, 1., 1.5}; // Folds execution at 45m and 90m
+		// Folds execution at 45m and 90m
+		final double[] folds = {0.5, 1., 1.5};
 
 		// Build composite simulation payload object
 		final SimulationInputs inputs = new SimulationInputs(

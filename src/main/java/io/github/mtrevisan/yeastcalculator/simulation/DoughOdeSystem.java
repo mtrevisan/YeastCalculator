@@ -143,14 +143,17 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		// --- CONTINUOUS CELLULAR MORTALITY RATE (MICROBIOLOGICAL LITERATURE) ---
 		// 1. Basal physiological mortality rate under ideal conditions
 		// Derived from standard S. cerevisiae baseline parameters (approx. 0.01% per minute)
-		final double kd0 = 0.0001; // [min^-1]
+		// [min^-1]
+		final double kd0 = 0.0001;
 
 		// 2. Starvation-induced mortality modeling
 		// Replaces the step function with a smooth, continuous saturation curve (inverse Monod/Hill form).
 		// As available sugar (s) drops towards zero, cells progressively enter autophagy and autolysis.
 		// K_starve represents the affinity threshold below which survival stress accelerates.
-		final double maxStarvationDeathRate = 0.02; // Maximum mortality acceleration under complete starvation [min^-1]
-		final double kStarveAffinity = 0.002;       // Half-saturation concentration constant for starvation stress
+		// Maximum mortality acceleration under complete starvation [min^-1]
+		final double maxStarvationDeathRate = 0.02;
+		// Half-saturation concentration constant for starvation stress
+		final double kStarveAffinity = 0.002;
 		final double kdStarvation = maxStarvationDeathRate * (1. - (s / (kStarveAffinity + s)));
 
 		// 3. Thermal death/inactivation kinetics (Bigelow / Arrhenius extension)
@@ -159,8 +162,10 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		double kdThermal = 0.;
 		if(currentTemperature > 38.){
 			// kD60 is the reference inactivation rate at 60 °C; zValue is the thermal sensitivity factor
-			final double kD60 = 0.24;   // Death velocity rate at base reference of 60 °C [min^-1]
-			final double zValue = 4.8;  // Temperature change required to alter thermal death by one log factor [°C]
+			// Death velocity rate at base reference of 60 °C [min^-1]
+			final double kD60 = 0.24;
+			// Temperature change required to alter thermal death by one log factor [°C]
+			final double zValue = 4.8;
 			kdThermal = kD60 * Math.pow(10., (currentTemperature - 60.) / zValue);
 		}
 

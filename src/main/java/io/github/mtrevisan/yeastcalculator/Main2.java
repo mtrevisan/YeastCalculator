@@ -46,7 +46,8 @@ public class Main2{
 
 		// 5. Multi-stage fermentation schedule (Hard constraints set by user)
 		final StageInput[] stages = {
-			new StageInput(28., 0.75, 4.1) // 4.1 hours warm maturation profile at 28 °C
+			// 4.1 hours warm maturation profile at 28 °C
+			new StageInput(28., 0.75, 4.1)
 		};
 
 		// 6. Physical structural interventions (Stretch & Fold timestamps in hours)
@@ -54,15 +55,8 @@ public class Main2{
 
 		// 7. Establish the dynamic baseline context configuration
 		final double maltSugarContent = 0.1;
-		final DoughRecipe dummyBaseRecipe = new DoughRecipe(
-			0.62,   // Placeholder hydration
-			0.022,  // Placeholder salt
-			0.02,   // Placeholder oil
-			0.002,  // Placeholder malt
-			maltSugarContent,
-			(15_000. / 110.) * (1. - maltSugarContent), // Diastatic power baseline
-			0.05    // Mixer friction factor addition (°C)
-		);
+		final DoughRecipe dummyBaseRecipe = new DoughRecipe(0.62, 0.022, 0.02, 0.002,
+			maltSugarContent, (15_000. / 110.) * (1. - maltSugarContent), 0.05);
 
 		final SimulationInputs initialInputs = new SimulationInputs(fractions, flourMatrix, flourTemperature,
 			airRelativeHumidity, yeastProps, dummyBaseRecipe, kneading, stages, folds);

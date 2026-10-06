@@ -172,13 +172,13 @@ public enum BakeryProduct{
 	private final double starvationPenaltyMultiplier;
 
 
-	BakeryProduct(final double vLimit, final double sLimit, final double yLimit, final double pTear,
-			final double pStarve){
-		this.glutenTearingLimit = vLimit;
-		this.minSafeSugarThreshold = sLimit;
-		this.maxAllowedFinalYeast = yLimit;
-		this.tearingPenaltyMultiplier = pTear;
-		this.starvationPenaltyMultiplier = pStarve;
+	BakeryProduct(final double glutenTearingLimit, final double minSafeSugarThreshold, final double maxAllowedFinalYeast,
+			final double tearingPenaltyMultiplier, final double starvationPenaltyMultiplier){
+		this.glutenTearingLimit = glutenTearingLimit;
+		this.minSafeSugarThreshold = minSafeSugarThreshold;
+		this.maxAllowedFinalYeast = maxAllowedFinalYeast;
+		this.tearingPenaltyMultiplier = tearingPenaltyMultiplier;
+		this.starvationPenaltyMultiplier = starvationPenaltyMultiplier;
 	}
 
 
@@ -205,12 +205,12 @@ public enum BakeryProduct{
 
 	/**
 	 * Computes the custom cost fitness value based on the final dough parameters.
-	 * * @param finalVolume  Simulated gas volume at the timeline end (mL/g_flour).
-	 * @param maxPotential Maximum theoretical expansion potential of the gluten network (mL/g_flour).
-	 * @param residualSugar Leftover fermentable sugar percentage at execution end (g/g_flour).
-	 * @param finalYeast     Instantaneous active yeast cell concentration at the execution end (g/g_flour).
-	 * @param finalYeastDot Instantaneous final gas derivative (speed of volume growth).
-	 * @return Fitness score. The closer to zero, the more optimal the yeast dosage is.
+	 * @param finalVolume	Simulated gas volume at the timeline end (mL/g_flour).
+	 * @param maxPotential	Maximum theoretical expansion potential of the gluten network (mL/g_flour).
+	 * @param residualSugar	Leftover fermentable sugar percentage at execution end (g/g_flour).
+	 * @param finalYeast	Instantaneous active yeast cell concentration at the execution end (g/g_flour).
+	 * @param finalYeastDot	Instantaneous final gas derivative (speed of volume growth).
+	 * @return	Fitness score. The closer to zero, the more optimal the yeast dosage is.
 	 */
 	public abstract double computeFitness(double finalVolume, double maxPotential, double residualSugar,
 		double finalYeast, double finalYeastDot);
