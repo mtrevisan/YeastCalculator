@@ -40,7 +40,7 @@ public class Main2{
 		// 1. Definition of the Flour Blend
 		final double[] fractions = {1.};
 		final FlourInput[] flourMatrix = {
-			new FlourInput(205., 0.523, 0.014, 0.12, 0.01, 0.017, 0.003, FlourType.WHEAT)
+			new FlourInput(230., 0.523, 0.014, 0.12, 0.01, 0.017, 0.003, FlourType.WHEAT)
 		};
 
 		// 2. Structural & Storage environmental baselines
@@ -57,7 +57,7 @@ public class Main2{
 		// 5. Multi-stage fermentation schedule (Hard constraints set by user)
 		final StageInput[] stages = {
 			// 4.1 hours warm maturation profile at 28 °C
-			new StageInput(28., 0.75, 4.1)
+			new StageInput(24., 0.75, 4.6)
 		};
 
 		// 6. Physical structural interventions (Stretch & Fold timestamps in hours)
@@ -204,20 +204,20 @@ public class Main2{
 		else if(waterRatio <= 0.55)
 			estimatedRequired *= 1.15;
 
-		if(totalDuration < estimatedRequired){
+		if(Math.abs(totalDuration - estimatedRequired) >= 0.01){
 			System.out.printf("[WARNING] Insufficient maturation window for this flour strength (W: %.0f).\n", blendW);
-			System.out.printf("          Required: ~%.1fh, Provided: %.1fh.\n", estimatedRequired, totalDuration);
+			System.out.printf("          Required: ~%.2f h, Provided: %.2f h.\n", estimatedRequired, totalDuration);
 			System.out.println("          Result: The gluten mesh will remain overly tense, causing high springback (elastic snap)");
 			System.out.println("                  and potential gas retention instability during stretching.");
 		}
-		else if(totalDuration > (estimatedRequired * 2.5)){
+		else if(totalDuration > estimatedRequired * 2.5){
 			System.out.printf("[WARNING] Excessive room-temperature maturation window detected for W: %.0f.\n", blendW);
-			System.out.printf("          Optimal window capped around ~%.1fh, Provided: %.1fh.\n", estimatedRequired * 2., totalDuration);
+			System.out.printf("          Optimal window capped around ~%.1f h, Provided: %.1f h.\n", estimatedRequired * 2., totalDuration);
 			System.out.println("          Result: Protease activity might over-degrade the gluten matrix structure,");
 			System.out.println("                  leading to a sticky, fragile dough prone to tearing.");
 		}
 		else{
-			System.out.printf("[SUCCESS] Maturation timeline (%.1fh) is well-proportioned for this blend (W: %.0f, Hydration: %.0f%%).\n",
+			System.out.printf("[SUCCESS] Maturation timeline (%.1f h) is well-proportioned for this blend (W: %.0f, Hydration: %.0f%%).\n",
 				totalDuration, blendW, waterRatio * 100.);
 			System.out.println("          Result: Optimal balance between gluten extensibility and gas holding matrix tenacity.");
 		}
