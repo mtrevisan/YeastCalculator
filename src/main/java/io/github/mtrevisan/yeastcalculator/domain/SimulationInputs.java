@@ -7,11 +7,15 @@ import java.util.Arrays;
  * Orchestrator payload containing the complete input matrix of the bake environment.
  */
 public record SimulationInputs(
+	// Flour Matrix inputs
 	double[] fractions,
 	FlourInput[] flourMatrix,
+	// Environmental Baselines
 	double flourTemperature,
 	double airRelativeHumidity,
+	// Yeast Target Specs
 	YeastInput yeastProperties,
+	// Process Timelines
 	DoughRecipe recipe,
 	KneadingInput kneading,
 	StageInput[] stages,
@@ -32,8 +36,8 @@ public record SimulationInputs(
 		this.yeastProperties = yeastProperties;
 		this.recipe = recipe;
 		this.kneading = kneading;
-		this.stages = stages != null? Arrays.copyOf(stages, stages.length): new StageInput[0];
-		this.folds = folds != null? Arrays.copyOf(folds, folds.length): new double[0];
+		this.stages = (stages != null? Arrays.copyOf(stages, stages.length): new StageInput[0]);
+		this.folds = (folds != null? Arrays.copyOf(folds, folds.length): new double[0]);
 	}
 
 }

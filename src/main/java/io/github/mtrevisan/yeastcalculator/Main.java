@@ -36,7 +36,7 @@ public class Main{
 		final double airRelativeHumidity = 0.54;
 
 		// 3. Yeast properties
-		final YeastInput yeastProps = new YeastInput(0.70, 5. / 60.);
+		final YeastInput yeastProps = new YeastInput(0.70);
 
 		// 4. Dough Recipe Configuration
 		final double maltSugarContent = 0.1;
@@ -74,7 +74,7 @@ public class Main{
 		System.out.println("Selected Target Product: " + selectedProduct.name());
 
 		// Execute Inversion Optimization Target Calculation
-		final double optimalYeastRatio = YeastOptimizer.findOptimalYeast(inputs, selectedProduct);
+		final double optimalYeastRatio = YeastOptimizer.findOptimalYeast(inputs, selectedProduct, null);
 
 		System.out.printf("Optimal Yeast: %.2f%%\n", optimalYeastRatio * 100.);
 

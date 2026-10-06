@@ -51,6 +51,15 @@ public enum BakeryProduct{
 
 			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
 		}
+
+		@Override
+		public HandlingInstruction getHandlingInstructions(int setNumber, int totalSets, double absoluteMinute){
+			String title = "EXTENSIBILITY ALIGNMENT PHASE";
+			String description = "Pull the dough edge upward with moderate tension and fold it over the center. "
+				+ "Rotate 90° and repeat for all 4 sides. Work quickly to establish a baseline shape while "
+				+ "keeping the gluten highly extensible for manual stretching later.";
+			return new HandlingInstruction(title, description, "MODERATE");
+		}
 	},
 
 	/**
@@ -86,6 +95,25 @@ public enum BakeryProduct{
 			final double kineticPenalty = Math.abs(finalYeastDot) * 5.;
 
 			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
+		}
+
+		@Override
+		public HandlingInstruction getHandlingInstructions(int setNumber, int totalSets, double absoluteMinute){
+			if(setNumber <= 2)
+				return new HandlingInstruction(
+					"HIGH-TENSION COIL STRETCH",
+					"Perform vigorous coil folds. Wet your hands, lift the entire dough mass from the center, "
+						+ "allow it to stretch downward under its own weight, and tuck the ends underneath. "
+						+ "Essential for driving vertical strength into highly hydrated dough networks.",
+					"HIGH"
+				);
+
+			return new HandlingInstruction(
+				"ALVEOLAR PRESERVATION COIL",
+				"Gently slide hands under the dough and perform a light coil fold. Do not stretch to the breaking point. "
+					+ "The cell walls are thinning; excessive force will pop large air pockets and cause gas weeping.",
+				"GENTLE"
+			);
 		}
 	},
 
@@ -125,6 +153,26 @@ public enum BakeryProduct{
 
 			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
 		}
+
+		@Override
+		public HandlingInstruction getHandlingInstructions(int setNumber, int totalSets, double absoluteMinute){
+			if(setNumber == 1)
+				return new HandlingInstruction(
+					"STRUCTURAL ALIGNMENT PHASE",
+					"Slide wet hands underneath the dough, pull firmly straight upward to maximize mechanical elongation, "
+						+ "and fold it over the center. Repeat for all 4 quadrants. This forces the chaotic protein clumps "
+						+ "to re-align into long, parallel sheets, building early structural tenacity (P).",
+					"HIGH"
+				);
+
+			return new HandlingInstruction(
+				"GAS POCKET SUBDIVISION PHASE",
+				"Execute with extreme gentleness. Dip fingertips in water, slide them under the edge, lift slightly until "
+					+ "you feel baseline resistance, and flip smoothly. Do not punch or stretch aggressively. This splits "
+					+ "coarse air bubbles into thousands of micro-cavities, securing a sponge-like, soft crumb distribution.",
+				"GENTLE"
+			);
+		}
 	},
 
 	/**
@@ -161,6 +209,17 @@ public enum BakeryProduct{
 			final double stabilityPenalty = Math.abs(finalYeastDot) * 12.;
 
 			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + stabilityPenalty;
+		}
+
+		@Override
+		public HandlingInstruction getHandlingInstructions(int setNumber, int totalSets, double absoluteMinute){
+			return new HandlingInstruction(
+				"TENACITY OVERLAP FOLD",
+				"Lift and fold the dough tightly onto itself. Aim to generate strong surface tension across the skin. "
+					+ "This structural elasticity creates the pressure reservoir required to support clean scoring cuts "
+					+ "and three-dimensional oven-spring without flattening out.",
+				"HIGH"
+			);
 		}
 	};
 
@@ -214,5 +273,19 @@ public enum BakeryProduct{
 	 */
 	public abstract double computeFitness(double finalVolume, double maxPotential, double residualSugar,
 		double finalYeast, double finalYeastDot);
+
+	/**
+	 * Generates specialized handling text advice mapped to the current process stage context.
+	 */
+	public abstract HandlingInstruction getHandlingInstructions(int setNumber, int totalSets, double absoluteMinute);
+
+	/**
+	 * Data transfer structure wrapping physical execution metrics.
+	 */
+	public record HandlingInstruction(
+		String title,
+		String instructions,
+		// GENTLE, MODERATE, HIGH
+		String intensity){}
 
 }

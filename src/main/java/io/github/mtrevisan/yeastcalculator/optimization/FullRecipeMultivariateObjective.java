@@ -28,10 +28,30 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 	@Override
 	public double value(final double[] point){
 		// Extract simultaneous multi-variable parameters from the optimizer vector
+		// 1. Core recipe fractions
 		final double hydration = point[0];
 		final double salt = point[1];
 		final double oil = point[2];
 		final double malt = point[3];
+
+		// 2. Dynamic S&F schedule extraction
+		// Optimized number of fold sets
+		final int numberOfFolds = (int)Math.round(point[4]);
+		// The exact minute of the very first fold set (e.g., 20.0)
+		final double initialFoldDelay = point[5];
+		final double relaxationFactor = 1.4;
+
+		// Dynamically build the folds timestamp array in minutes
+		final double[] dynamicFolds = new double[numberOfFolds];
+		double localizedDelay = initialFoldDelay;
+		double cumulativeTime = 0.;
+		for(int i = 0; i < numberOfFolds; i ++){
+			cumulativeTime += localizedDelay;
+			dynamicFolds[i] = cumulativeTime;
+
+			// The next interval is physically scaled longer to account for gluten relaxation
+			localizedDelay *= relaxationFactor;
+		}
 
 		// Construct the candidate recipe payload
 		final DoughRecipe candidateRecipe = new DoughRecipe(hydration, salt, oil, malt,
@@ -41,10 +61,10 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 		final SimulationInputs candidateInputs = new SimulationInputs(baseInputs.fractions(),
 			baseInputs.flourMatrix(), baseInputs.flourTemperature(), baseInputs.airRelativeHumidity(),
 			baseInputs.yeastProperties(), candidateRecipe, baseInputs.kneading(), baseInputs.stages(),
-			baseInputs.folds());
+			dynamicFolds);
 
 		// 1. Solve the nested univariate problem for the optimal yeast target fraction
-		final double optimalYeast = YeastOptimizer.findOptimalYeast(candidateInputs, targetProduct);
+		final double optimalYeast = YeastOptimizer.findOptimalYeast(candidateInputs, targetProduct, null);
 
 		// 2. Execute the full system ODE integration loop
 		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(candidateInputs);
