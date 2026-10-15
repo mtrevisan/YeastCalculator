@@ -91,9 +91,11 @@ public class YeastOptimizer{
 	 */
 	private static double evaluateFitness(final SimulationInputs in, final GabMoistureModel.GabResult gab,
 			final double baseMaxGasPotential, final double[] y, final BakeryProduct targetProduct){
+		// Calculate total timeline execution [min]
 		double totalMinutes = 0.;
 		for(final StageInput stage : in.stages())
-			totalMinutes += stage.duration() * 60.;
+			totalMinutes += stage.duration();
+		totalMinutes *= 60.;
 
 		// Only folds that actually occur within the timeline boost the final ceiling
 		final FoldEventHandler foldHandler = new FoldEventHandler(in.folds());
