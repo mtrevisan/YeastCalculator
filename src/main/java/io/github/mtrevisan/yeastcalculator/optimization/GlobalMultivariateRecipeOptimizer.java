@@ -12,6 +12,8 @@ import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
 import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.BOBYQAOptimizer;
 import org.apache.commons.math3.optim.PointValuePair;
 
+import java.util.Arrays;
+
 
 public class GlobalMultivariateRecipeOptimizer{
 
@@ -22,7 +24,7 @@ public class GlobalMultivariateRecipeOptimizer{
 	public static OptimizedRecipeResult optimizeFullRecipe(final SimulationInputs baseInputs,
 			final BakeryProduct targetProduct){
 		// Number of variables to optimize concurrently: [Hydration, Salt, Oil, Malt]
-		final int numVariables = 6;
+		final int numVariables = 7;
 
 		// BOBYQA requires the number of interpolation points to be mathematically bounded:
 		// Standard rule of thumb: 2 * numVariables + 1 = 9 points
@@ -67,16 +69,22 @@ public class GlobalMultivariateRecipeOptimizer{
 		final double safeInitialHydration = Math.min(0.62, dynamicHydrationCap - 0.02);
 		final double[] initialGuess = new double[]{safeInitialHydration, 0.022, 0.02, 0.002, 2., 20.};
 		// Strictly enforce lower and upper physical bounds to maintain culinary and rheological safety
-		// Min: 50% Hydr, 1.8% Salt, 0% Oil, 0% Malt, Min 0 folds, 15 min apart
-		final double[] lowerBounds = new double[]{0.50, 0.018, 0., 0., 0., 15.};
-		// Max: WAC-capped Hydr, 3.2% Salt, 10% Oil, 1.5% Malt, Max 5 folds, 60 min apart
-		final double[] upperBounds = new double[]{dynamicHydrationCap, 0.032, 0.1, 0.015, 5., 60.};
+		// Min: 50% Hydr, 0.5% Salt, 0% Oil, 0% Malt, 0 folds, 10 initial fold delay, fold interval factor 1
+		final double[] lowerBounds = new double[]{0.50, 0.005, 0., 0., 0., 10., 1.};
+		// Max: WAC-capped Hydr, 4% Salt, 10% Oil, 3% Malt, 5 folds, 60 initial fold delay, fold interval factor 2
+		final double[] upperBounds = new double[]{dynamicHydrationCap, 0.04, 0.1, 0.03, 5., 60., 2.};
 
-		final FullRecipeMultivariateObjective objective = new FullRecipeMultivariateObjective(baseInputs, targetProduct);
+		final FullRecipeMultivariateObjective objective = new FullRecipeMultivariateObjective(baseInputs, targetProduct,
+			lowerBounds, upperBounds);
 
 		// Execute multivariate optimization execution pass
+		// The search runs in the normalized [0, 1] space
+		final double[] normalizedLowerBounds = new double[numVariables];
+		final double[] normalizedUpperBounds = new double[numVariables];
+		Arrays.fill(normalizedUpperBounds, 1.);
 		final PointValuePair optimum = optimizer.optimize(new MaxEval(300), new ObjectiveFunction(objective),
-			GoalType.MINIMIZE, new InitialGuess(initialGuess), new SimpleBounds(lowerBounds, upperBounds));
+			GoalType.MINIMIZE, new InitialGuess(objective.normalize(initialGuess)),
+			new SimpleBounds(normalizedLowerBounds, normalizedUpperBounds));
 
 		final double[] optimizedPoints = optimum.getPoint();
 		final double finalFitness = optimum.getValue();

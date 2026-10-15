@@ -12,34 +12,57 @@ import org.apache.commons.math3.analysis.MultivariateFunction;
 
 /**
  * True multivariate objective function that maps Apache's continuous search vector
- * directly into the synchronized recipe space.
+ * directly into the synchronized recipe space with [0, 1] input normalization.
  */
 public class FullRecipeMultivariateObjective implements MultivariateFunction{
 
+	// The next fold interval is physically scaled longer to account for gluten relaxation
+	public static final double RELAXATION_FACTOR = 1.4;
+
+
 	private final SimulationInputs baseInputs;
 	private final BakeryProduct targetProduct;
+	private final double[] lowerBounds;
+	private final double[] upperBounds;
 
 
-	public FullRecipeMultivariateObjective(final SimulationInputs baseInputs, final BakeryProduct targetProduct){
+	public FullRecipeMultivariateObjective(final SimulationInputs baseInputs, final BakeryProduct targetProduct,
+			final double[] lowerBounds, final double[] upperBounds){
 		this.baseInputs = baseInputs;
 		this.targetProduct = targetProduct;
+		this.lowerBounds = lowerBounds;
+		this.upperBounds = upperBounds;
+	}
+
+
+	/**
+	 * Maps a physical point onto the normalized [0, 1] search space.
+	 */
+	public double[] normalize(final double[] point){
+		final int length = point.length;
+		final double[] normalizedPoint = new double[length];
+		for(int i = 0; i < length; i ++)
+			normalizedPoint[i] = (point[i] - lowerBounds[i]) / (upperBounds[i] - lowerBounds[i]);
+		return normalizedPoint;
+	}
+
+	/**
+	 * Maps a normalized [0, 1] search vector onto its physical bounds.
+	 */
+	private double denormalize(final double normalizedValue, final int index){
+		return lowerBounds[index] + normalizedValue * (upperBounds[index] - lowerBounds[index]);
 	}
 
 	@Override
 	public double value(final double[] point){
-		// Extract simultaneous multi-variable parameters from the optimizer vector
-		// 1. Core recipe fractions
-		final double hydration = point[0];
-		final double salt = point[1];
-		final double oil = point[2];
-		final double malt = point[3];
-
-		// 2. Dynamic S&F schedule extraction
-		// Optimized number of fold sets
-		final int numberOfFolds = (int)Math.round(point[4]);
-		// The exact minute of the very first fold set (e.g., 20.0)
-		final double initialFoldDelay = point[5];
-		final double relaxationFactor = 1.4;
+		// Denormalize inputs from [0, 1] to physical ranges
+		final double hydration = denormalize(point[0], 0);
+		final double salt = denormalize(point[1], 1);
+		final double oil = denormalize(point[2], 2);
+		final double malt = denormalize(point[3], 3);
+		final int numberOfFolds = (int)Math.round(denormalize(point[4], 4));
+		final double initialFoldDelay = denormalize(point[5], 5);
+		final double relaxationFactor = denormalize(point[6], 6);
 
 		// Dynamically build the folds timestamp array in minutes
 		final double[] dynamicFolds = new double[numberOfFolds];
@@ -49,7 +72,7 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 			cumulativeTime += localizedDelay;
 			dynamicFolds[i] = cumulativeTime;
 
-			// The next interval is physically scaled longer to account for gluten relaxation
+			// The next interval is physically scaled by the optimized relaxation factor
 			localizedDelay *= relaxationFactor;
 		}
 
@@ -101,14 +124,13 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 	}
 
 	public static double[] buildFoldSchedule(final int optimizedFoldCount, double currentDelay){
-		final double relaxationFactor = 1.4;
 		final double[] optimizedFoldsArray = new double[optimizedFoldCount];
 		// Serves as initial fold delay field variable mapping
 		double cumulativeMinutes = 0.;
 		for(int i = 0; i < optimizedFoldCount; i ++){
 			cumulativeMinutes += currentDelay;
 			optimizedFoldsArray[i] = cumulativeMinutes;
-			currentDelay *= relaxationFactor;
+			currentDelay *= RELAXATION_FACTOR;
 		}
 		return optimizedFoldsArray;
 	}
