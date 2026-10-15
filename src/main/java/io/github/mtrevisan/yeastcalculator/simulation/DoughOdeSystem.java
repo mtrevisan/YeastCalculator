@@ -2,6 +2,7 @@ package io.github.mtrevisan.yeastcalculator.simulation;
 
 import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
 import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
+import io.github.mtrevisan.yeastcalculator.thermodynamic.GabMoistureModel;
 import org.apache.commons.math3.ode.FirstOrderDifferentialEquations;
 
 
@@ -18,6 +19,11 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	// Biological constants for S. cerevisiae
 	// Minimum aw limit for growth
 	private static final double AW_MIN = 0.88;
+	// Norrish-like constant for the aw depression caused by the hydrated flour matrix (starch, gluten, fibers),
+	// calibrated so that an unsalted dough at 60% hydration sits at aw ~0.975
+	private static final double K_MATRIX = 0.019;
+	// Molar mass of NaCl [g/mol]
+	private static final double NACL_MOLAR_MASS = 58.44;
 	// Ethanol toxicity ceiling (~60 g/kg dough)
 	private static final double ETHANOL_MAX = 0.06;
 	// Ghose & Tyagi exponent
@@ -35,17 +41,22 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 	private final double currentTemperature;
 	private final double currentStageRH;
+	// Flour moisture strictly bound in the GAB monolayer (non-solvent) [g/g_flour]
+	private final double boundWater;
+	// Flour moisture above the GAB monolayer (free to act as solvent) [g/g_flour]
 	private final double activeWater;
 	private final double maxGasPotential;
 	private final SimulationInputs in;
 	private final FoldEventHandler foldHandler;
 
 
-	public DoughOdeSystem(final double currentTemperature, final double currentStageRH, final double activeWater,
-			final double maxGasPotential, final SimulationInputs in, final FoldEventHandler foldHandler){
+	public DoughOdeSystem(final double currentTemperature, final double currentStageRH,
+			final GabMoistureModel.GabResult gab, final double maxGasPotential, final SimulationInputs in,
+			final FoldEventHandler foldHandler){
 		this.currentTemperature = currentTemperature;
 		this.currentStageRH = currentStageRH;
-		this.activeWater = activeWater;
+		this.boundWater = gab.flourStrictlyBoundWater;
+		this.activeWater = gab.flourActiveWater;
 		this.maxGasPotential = maxGasPotential;
 		this.in = in;
 		this.foldHandler = foldHandler;
@@ -68,18 +79,26 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		final double waterRatio = in.recipe().waterRatio();
 		final double saltRatio = in.recipe().saltRatio();
 
-		// Molality of salt (moles of NaCl per kg of water in the mixture)
-		final double molesSalt = saltRatio / 58.44;
-		final double kgWater = waterRatio;
+		// Solvent water: added water plus the flour moisture above the GAB monolayer (monolayer water is strongly
+		// bound and does not dissolve solutes) [g/g_flour]
+		final double solventWater = waterRatio + activeWater;
+		// Dry flour solids [g/g_flour]
+		final double drySolids = 1. - boundWater - activeWater;
+
+		// Molality of salt (moles of NaCl per kg of solvent water); all ratios are per gram of flour, hence the
+		// grams-to-kilograms conversion of the water mass
+		final double molesSalt = saltRatio / NACL_MOLAR_MASS;
+		final double kgWater = solventWater / 1000.;
 		final double molalitySalt = (kgWater > 0.? molesSalt / kgWater: 0.);
 
 		// aw due to salt: exp(-0.018 * phi * nu * m) where phi=0.93, nu=2
 		final double awSalt = Math.exp(-0.018 * 0.93 * 2. * molalitySalt);
 
-		// The total aw is the product of the aw of the native flour and the salt
-		// Typical value of an unsalted dough
-		final double awFlourBase = 0.96;
-		final double totalAw = Math.min(1., awFlourBase * awSalt);
+		// aw due to the hydrated flour matrix: the more water per unit of dry solids, the closer to pure water
+		final double awMatrix = (solventWater > 0.? Math.exp(-K_MATRIX * drySolids / solventWater): 0.);
+
+		// The total aw is the product of the matrix and the salt contributions
+		final double totalAw = Math.min(1., awMatrix * awSalt);
 
 		// Cardinal inhibition via aw (Rosso et al., 1995)
 		double gammaAw = 0.;
@@ -120,8 +139,8 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 		// Rheological volume evolution with smooth Bloksma leakage boundaries
 		// Integrating retention efficiency with dynamic structural modifiers
-		final double skinningModifier = (currentStageRH >= 0.70? 1.: Math.max(0.6, 1. - (0.70 - currentStageRH) * 0.8));
-		final double dynamicMaxPotential = maxGasPotential * foldHandler.getCurrentGasPotentialModifier() * skinningModifier;
+		final double dynamicMaxPotential = maxGasPotential * foldHandler.getCurrentGasPotentialModifier()
+			* skinningModifier(currentStageRH);
 
 		// K_tear defines the slope of the bubble collapse (polymer rheology)
 		final double kTear = 1.5;
@@ -137,6 +156,13 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		yDot[1] = dS_dt;
 		yDot[2] = dVgas_dt;
 		yDot[3] = dEtOH_dt;
+	}
+
+	/**
+	 * Gas retention penalty caused by surface skinning (crust drying) under low ambient relative humidity.
+	 */
+	public static double skinningModifier(final double relativeHumidity){
+		return (relativeHumidity >= 0.70? 1.: Math.max(0.6, 1. - (0.70 - relativeHumidity) * 0.8));
 	}
 
 	private double cellMortalityRate(double s){

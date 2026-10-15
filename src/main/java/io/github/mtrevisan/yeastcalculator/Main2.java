@@ -8,6 +8,7 @@ import io.github.mtrevisan.yeastcalculator.domain.KneadingInput;
 import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
 import io.github.mtrevisan.yeastcalculator.domain.StageInput;
 import io.github.mtrevisan.yeastcalculator.domain.YeastInput;
+import io.github.mtrevisan.yeastcalculator.optimization.FullRecipeMultivariateObjective;
 import io.github.mtrevisan.yeastcalculator.optimization.GlobalMultivariateRecipeOptimizer;
 import io.github.mtrevisan.yeastcalculator.optimization.YeastOptimizer;
 import io.github.mtrevisan.yeastcalculator.thermodynamic.GabMoistureModel;
@@ -77,7 +78,7 @@ public class Main2{
 		System.out.println("Selected Target Product: " + selectedProduct.name());
 		// PRINT CALCULATED TIMELINE INSIGHTS PRIOR TO EXECUTING OPTIMIZATION RAMP
 		System.out.printf("Yeast Type Target Moisture : %.1f%%\n", targetYeastMoisture * 100.);
-		System.out.printf("Rehydration Optimal Window : %s\n", yeastProps.getRehydrationWindow() * 60.);
+		System.out.printf("Rehydration Optimal Window : %.1f min\n", yeastProps.getRehydrationWindow());
 		System.out.println("Scanning space...\n");
 
 		// --- EXECUTE THE MULTIVARIATE SEARCH OVER CONTINUOUS BOUNDS ---
@@ -85,16 +86,8 @@ public class Main2{
 			GlobalMultivariateRecipeOptimizer.optimizeFullRecipe(initialInputs, selectedProduct);
 
 		// Reconstruct runtime fold vector array from optimized output points to run verification pass
-		final double relaxationFactor = 1.4;
-		final double[] optimizedFoldsArray = new double[result.optimizedFoldCount()];
-		// Serves as initial fold delay field variable mapping
-		double currentDelay = result.optimizedFoldInterval();
-		double cumulativeMinutes = 0.;
-		for(int i = 0; i < result.optimizedFoldCount(); i ++){
-			cumulativeMinutes += currentDelay;
-			optimizedFoldsArray[i] = cumulativeMinutes;
-			currentDelay *= relaxationFactor;
-		}
+		final double[] optimizedFoldsArray = FullRecipeMultivariateObjective.buildFoldSchedule(
+			result.optimizedFoldCount(), result.optimizedFoldInterval());
 
 		// Reconstruct final optimized input payload for validation and diagnostic logging
 		final SimulationInputs optimizedInputs = new SimulationInputs(fractions, flourMatrix, flourTemperature,
@@ -135,10 +128,11 @@ public class Main2{
 
 		if(finalState != null){
 			System.out.println("\n--- FINAL DOUGH STATE AT TIMELINE EXPIRATION ---");
-			System.out.printf("Yeast (Active Matter): %.2f%%\n", finalState[0] * 100.);
-			System.out.printf("Sugars Remaining     : %.1f%%\n", finalState[1] * 100.);
+			// All state variables are expressed per gram of flour
+			System.out.printf("Yeast (Dry Biomass)  : %.2f%% of flour\n", finalState[0] * 100.);
+			System.out.printf("Sugars Remaining     : %.2f%% of flour\n", finalState[1] * 100.);
 			System.out.printf("Retained Gas Volume  : %.1f ml/g_flour\n", finalState[2]);
-			System.out.printf("Ethanol Accumulation : %.1f g/kg_dough\n", finalState[3] * 1000.);
+			System.out.printf("Ethanol Accumulation : %.1f g/kg_flour\n", finalState[3] * 1000.);
 
 			// Calculate total timeline execution hours
 			double totalDuration = 0.;

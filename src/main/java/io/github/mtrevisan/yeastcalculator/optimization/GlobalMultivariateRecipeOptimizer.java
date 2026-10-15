@@ -12,6 +12,10 @@ import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
 import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.BOBYQAOptimizer;
 import org.apache.commons.math3.optim.PointValuePair;
 
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.stream.IntStream;
+
 
 public class GlobalMultivariateRecipeOptimizer{
 
@@ -19,15 +23,16 @@ public class GlobalMultivariateRecipeOptimizer{
 		int optimizedFoldCount, double optimizedFoldInterval){}
 
 
+	// Maximum number of stretch & fold sets enumerated by the search
+	private static final int MAX_FOLDS = 5;
+	// Trust region radii, expressed in the normalized [0, 1] search space
+	private static final double INITIAL_TRUST_REGION_RADIUS = 0.2;
+	private static final double STOPPING_TRUST_REGION_RADIUS = 1.e-4;
+	private static final int MAX_EVALUATIONS = 300;
+
+
 	public static OptimizedRecipeResult optimizeFullRecipe(final SimulationInputs baseInputs,
 			final BakeryProduct targetProduct){
-		// Number of variables to optimize concurrently: [Hydration, Salt, Oil, Malt]
-		final int numVariables = 6;
-
-		// BOBYQA requires the number of interpolation points to be mathematically bounded:
-		// Standard rule of thumb: 2 * numVariables + 1 = 9 points
-		final BOBYQAOptimizer optimizer = new BOBYQAOptimizer(2 * numVariables + 1);
-
 		// --- AUTOMATIC HYDRATION CAP HANDLER (BIOCHEMICAL WAC MODEL) ---
 		// Resolves the weighted average characteristics of the flour blend matrix
 		double blendedProtein = 0.;
@@ -62,50 +67,56 @@ public class GlobalMultivariateRecipeOptimizer{
 		// Diagnostic info track printout
 		System.out.printf("Flour Blend WAC resolved. Dynamically clamping Hydration Cap to: %.1f%%\n", dynamicHydrationCap * 100.);
 
-		// Search Vector layout: [Hydration, Salt, Oil, Malt, NumberOfFolds, InitialFoldDelayMinutes]
+		// Search Vector layout: [Hydration, Salt, Oil, Malt, InitialFoldDelayMinutes]
 		// Self-correct initial guess if it exceeds our newly calculated ceiling cap
 		final double safeInitialHydration = Math.min(0.62, dynamicHydrationCap - 0.02);
-		final double[] initialGuess = new double[]{safeInitialHydration, 0.022, 0.02, 0.002, 2., 20.};
+		final double[] initialGuess = new double[]{safeInitialHydration, 0.022, 0.02, 0.002, 20.};
 		// Strictly enforce lower and upper physical bounds to maintain culinary and rheological safety
-		// Min: 50% Hydr, 1.8% Salt, 0% Oil, 0% Malt, Min 0 folds, 15 min apart
-		final double[] lowerBounds = new double[]{0.50, 0.018, 0., 0., 0., 15.};
-		// Max: 85% Hydr, 3.2% Salt, 10% Oil, 1.5% Malt, Max 5 folds, 60 min apart
-		final double[] upperBounds = new double[]{dynamicHydrationCap, 0.032, 0.1, 0.015, 5., 60.};
+		// Min: 50% Hydr, 1.8% Salt, 0% Oil, 0% Malt, 15 min first fold delay
+		final double[] lowerBounds = new double[]{0.50, 0.018, 0., 0., 15.};
+		// Max: WAC-capped Hydr, 3.2% Salt, 10% Oil, 1.5% Malt, 60 min first fold delay
+		final double[] upperBounds = new double[]{dynamicHydrationCap, 0.032, 0.1, 0.015, 60.};
 
-		final FullRecipeMultivariateObjective objective = new FullRecipeMultivariateObjective(baseInputs, targetProduct);
+		// The fold count is an integer (rounding it inside a continuous search makes the objective a step function that
+		// BOBYQA cannot model): run an independent continuous search for each count and keep the best one
+		return IntStream.rangeClosed(0, MAX_FOLDS)
+			.parallel()
+			.mapToObj(numberOfFolds -> optimizeForFoldCount(baseInputs, targetProduct, numberOfFolds, initialGuess,
+				lowerBounds, upperBounds))
+			.min(Comparator.comparingDouble(OptimizedRecipeResult::finalFitness))
+			.orElseThrow();
+	}
+
+	private static OptimizedRecipeResult optimizeForFoldCount(final SimulationInputs baseInputs,
+			final BakeryProduct targetProduct, final int numberOfFolds, final double[] initialGuess,
+			final double[] lowerBounds, final double[] upperBounds){
+		final FullRecipeMultivariateObjective objective = new FullRecipeMultivariateObjective(baseInputs, targetProduct,
+			numberOfFolds, lowerBounds, upperBounds);
+
+		// BOBYQA requires the number of interpolation points to be mathematically bounded:
+		// Standard rule of thumb: 2 * numVariables + 1 points
+		final int numVariables = FullRecipeMultivariateObjective.DIMENSION;
+		final BOBYQAOptimizer optimizer = new BOBYQAOptimizer(2 * numVariables + 1, INITIAL_TRUST_REGION_RADIUS,
+			STOPPING_TRUST_REGION_RADIUS);
+
+		// The search runs in the normalized [0, 1] space
+		final double[] normalizedLowerBounds = new double[numVariables];
+		final double[] normalizedUpperBounds = new double[numVariables];
+		Arrays.fill(normalizedUpperBounds, 1.);
 
 		// Execute multivariate optimization execution pass
-		final PointValuePair optimum = optimizer.optimize(new MaxEval(300), new ObjectiveFunction(objective),
-			GoalType.MINIMIZE, new InitialGuess(initialGuess), new SimpleBounds(lowerBounds, upperBounds));
+		final PointValuePair optimum = optimizer.optimize(new MaxEval(MAX_EVALUATIONS), new ObjectiveFunction(objective),
+			GoalType.MINIMIZE, new InitialGuess(objective.normalize(initialGuess)),
+			new SimpleBounds(normalizedLowerBounds, normalizedUpperBounds));
 
-		final double[] optimizedPoints = optimum.getPoint();
-		final double finalFitness = optimum.getValue();
-
-		final DoughRecipe finalRecipe = new DoughRecipe(optimizedPoints[0], optimizedPoints[1], optimizedPoints[2],
-			optimizedPoints[3], baseInputs.recipe().maltSugarContent(), baseInputs.recipe().maltPollakUnit(),
-			baseInputs.recipe().mixerFrictionFactor());
-
-		final int finalFoldsCount = (int)Math.round(optimizedPoints[4]);
-		final double finalInitialFoldDelay = optimizedPoints[5];
-		final double relaxationFactor = 1.4;
-		// Build the verification array using the exact same geometric progression as the objective function
-		final double[] finalFolds = new double[finalFoldsCount];
-		double localizedDelay = finalInitialFoldDelay;
-		double cumulativeTime = 0.;
-		for(int i = 0; i < finalFoldsCount; i ++){
-			cumulativeTime += localizedDelay;
-			finalFolds[i] = cumulativeTime;
-			localizedDelay *= relaxationFactor;
-		}
-
-		final SimulationInputs finalInputs = new SimulationInputs(baseInputs.fractions(), baseInputs.flourMatrix(),
-			baseInputs.flourTemperature(), baseInputs.airRelativeHumidity(), baseInputs.yeastProperties(),
-			finalRecipe, baseInputs.kneading(), baseInputs.stages(), finalFolds);
+		final double[] optimizedPoint = objective.denormalize(optimum.getPoint());
+		final SimulationInputs finalInputs = objective.buildCandidateInputs(optimizedPoint);
 
 		// Find the absolute final synchronized optimal yeast dosage for the resolved recipe matrix
 		final double bestYeast = YeastOptimizer.findOptimalYeast(finalInputs, targetProduct, null);
 
-		return new OptimizedRecipeResult(finalRecipe, bestYeast, finalFitness, finalFoldsCount, finalInitialFoldDelay);
+		return new OptimizedRecipeResult(finalInputs.recipe(), bestYeast, optimum.getValue(), numberOfFolds,
+			optimizedPoint[4]);
 	}
 
 }
