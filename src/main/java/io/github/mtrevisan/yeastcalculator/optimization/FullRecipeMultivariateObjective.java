@@ -11,27 +11,31 @@ import org.apache.commons.math3.analysis.MultivariateFunction;
 
 
 /**
- * True multivariate objective function that maps Apache's continuous search vector
- * directly into the synchronized recipe space with [0, 1] input normalization.
+ * Multivariate objective function for a FIXED number of stretch-and-fold sets.
+ * <p>
+ * The fold count is a discrete variable and cannot be optimized by BOBYQA, which assumes a
+ * smooth objective. It is therefore injected at construction time, and the search vector
+ * contains only the six continuous variables: [Hydration, Salt, Oil, Malt, InitialDelay,
+ * RelaxationFactor]. The caller (GlobalMultivariateRecipeOptimizer) iterates over the fold
+ * count externally and compares the resulting fitness values.
+ * </p>
  */
 public class FullRecipeMultivariateObjective implements MultivariateFunction{
-
-	// The next fold interval is physically scaled longer to account for gluten relaxation
-	public static final double RELAXATION_FACTOR = 1.4;
-
 
 	private final SimulationInputs baseInputs;
 	private final BakeryProduct targetProduct;
 	private final double[] lowerBounds;
 	private final double[] upperBounds;
+	private final int numberOfFolds;
 
 
 	public FullRecipeMultivariateObjective(final SimulationInputs baseInputs, final BakeryProduct targetProduct,
-			final double[] lowerBounds, final double[] upperBounds){
+			final double[] lowerBounds, final double[] upperBounds, final int numberOfFolds){
 		this.baseInputs = baseInputs;
 		this.targetProduct = targetProduct;
 		this.lowerBounds = lowerBounds;
 		this.upperBounds = upperBounds;
+		this.numberOfFolds = numberOfFolds;
 	}
 
 
@@ -49,6 +53,14 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 	/**
 	 * Maps a normalized [0, 1] search vector onto its physical bounds.
 	 */
+	public double[] denormalize(final double[] normalizedPoint){
+		final int length = normalizedPoint.length;
+		final double[] point = new double[length];
+		for(int i = 0; i < length; i ++)
+			point[i] = denormalize(normalizedPoint[i], i);
+		return point;
+	}
+
 	private double denormalize(final double normalizedValue, final int index){
 		return lowerBounds[index] + normalizedValue * (upperBounds[index] - lowerBounds[index]);
 	}
@@ -56,25 +68,21 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 	@Override
 	public double value(final double[] point){
 		// Denormalize inputs from [0, 1] to physical ranges
-		final double hydration = denormalize(point[0], 0);
-		final double salt = denormalize(point[1], 1);
-		final double oil = denormalize(point[2], 2);
-		final double malt = denormalize(point[3], 3);
-		final int numberOfFolds = (int)Math.round(denormalize(point[4], 4));
-		final double initialFoldDelay = denormalize(point[5], 5);
-		final double relaxationFactor = denormalize(point[6], 6);
+		final double[] p = denormalize(point);
+		final double hydration = p[0];
+		final double salt = p[1];
+		final double oil = p[2];
+		final double malt = p[3];
+		final double initialFoldDelay = p[4];
+		final double relaxationFactor = p[5];
 
-		// Dynamically build the folds timestamp array in minutes
-		final double[] dynamicFolds = new double[numberOfFolds];
-		double localizedDelay = initialFoldDelay;
-		double cumulativeTime = 0.;
-		for(int i = 0; i < numberOfFolds; i ++){
-			cumulativeTime += localizedDelay;
-			dynamicFolds[i] = cumulativeTime;
+		// The fold count is fixed externally
+		final double[] dynamicFolds = buildFoldSchedule(numberOfFolds, initialFoldDelay, relaxationFactor);
 
-			// The next interval is physically scaled by the optimized relaxation factor
-			localizedDelay *= relaxationFactor;
-		}
+		// Total timeline in minutes
+		double totalMinutes = 0.;
+		for(final StageInput stage : baseInputs.stages())
+			totalMinutes += stage.duration() * 60.;
 
 		// Construct the candidate recipe payload
 		final DoughRecipe candidateRecipe = new DoughRecipe(hydration, salt, oil, malt,
@@ -102,35 +110,38 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 		final double baseMaxGasPotential = YeastOptimizer.calculateMaxGasPotential(summary, candidateInputs,
 			targetProduct);
 		final StageInput lastStage = baseInputs.stages()[baseInputs.stages().length - 1];
+		final double lastStageRH = lastStage.relativeHumidity();
+		final double skinningModifier = DoughOdeSystem.skinningModifier(lastStageRH);
 
-		final double skinningModifier = (lastStage.relativeHumidity() >= 0.70
-			? 1.
-			: Math.max(0.6, 1. - (0.70 - lastStage.relativeHumidity()) * 0.8));
-		final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, baseInputs.folds().length)
+		// Fold handler must reflect the dynamic folds; only those falling inside the timeline count
+		final FoldEventHandler foldHandler = new FoldEventHandler(dynamicFolds);
+		foldHandler.advanceFoldsUpTo(totalMinutes);
+		final int appliedFolds = foldHandler.getAppliedFolds();
+
+		final double dynamicMaxPotential = baseMaxGasPotential
+			* Math.pow(FoldEventHandler.STRUCTURAL_GAIN, appliedFolds)
 			* skinningModifier;
 
-		double[] yDotFinal = new double[4];
-		double currentTime = 0.;
-		for(StageInput stage : baseInputs.stages())
-			currentTime += stage.duration();
-
-		final FoldEventHandler foldHandler = new FoldEventHandler(baseInputs.folds());
-		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStage.relativeHumidity(),
+		// Compute the final derivative at the endpoint, using the fold-aware handler
+		final double[] yDotFinal = new double[4];
+		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStageRH,
 			gab, baseMaxGasPotential, candidateInputs, foldHandler);
-		finalOde.computeDerivatives(currentTime * 60., finalState, yDotFinal);
+		finalOde.computeDerivatives(totalMinutes, finalState, yDotFinal);
 
-		// Evaluate and return global multi-variable fitness cost directly from the enum
-		return targetProduct.computeFitness(finalState[2], dynamicMaxPotential, finalState[1], finalState[0], yDotFinal[2]);
+		// Evaluate and return global multi-variable fitness cost
+		return targetProduct.computeFitness(finalState[2], dynamicMaxPotential, finalState[1], finalState[0],
+			yDotFinal[2], candidateRecipe.oilRatio(), appliedFolds, FoldEventHandler.DEGASSING_RETENTION);
 	}
 
-	public static double[] buildFoldSchedule(final int optimizedFoldCount, double currentDelay){
+	public static double[] buildFoldSchedule(final int optimizedFoldCount, double currentDelay,
+			final double relaxationFactor){
 		final double[] optimizedFoldsArray = new double[optimizedFoldCount];
 		// Serves as initial fold delay field variable mapping
 		double cumulativeMinutes = 0.;
 		for(int i = 0; i < optimizedFoldCount; i ++){
 			cumulativeMinutes += currentDelay;
 			optimizedFoldsArray[i] = cumulativeMinutes;
-			currentDelay *= RELAXATION_FACTOR;
+			currentDelay *= relaxationFactor;
 		}
 		return optimizedFoldsArray;
 	}

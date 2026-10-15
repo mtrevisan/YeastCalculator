@@ -43,7 +43,7 @@ public class YeastOptimizer{
 	 * Finds the optimal initial yeast ratio using a Brent Optimizer.
 	 */
 	public static double findOptimalYeast(final SimulationInputs in, final BakeryProduct targetProduct,
-		final PrefermentPlugin activePlugin){
+			final PrefermentPlugin activePlugin){
 		// 1. If an upstream plugin exists, let it intercept and pre-condition the inputs (Recipe re-balancing)
 		final SimulationInputs runtimeInputs;
 		final PrefermentPlugin.StatePreConditioner preConditioner;
@@ -91,28 +91,31 @@ public class YeastOptimizer{
 	 */
 	private static double evaluateFitness(final SimulationInputs in, final GabMoistureModel.GabResult gab,
 			final double baseMaxGasPotential, final double[] y, final BakeryProduct targetProduct){
-		// Calculate total timeline execution [min]
-		double currentTime = 0.;
+		double totalMinutes = 0.;
 		for(final StageInput stage : in.stages())
-			currentTime += stage.duration();
-		currentTime *= 60.;
+			totalMinutes += stage.duration() * 60.;
 
+		// Only folds that actually occur within the timeline boost the final ceiling
 		final FoldEventHandler foldHandler = new FoldEventHandler(in.folds());
+		foldHandler.advanceFoldsUpTo(totalMinutes);
+		final int appliedFolds = foldHandler.getAppliedFolds();
+
 		final double[] yDotFinal = new double[4];
 		// Final gas production speed: the fold gain is already in the potential, so use an exhausted fold handler
 		final StageInput lastStage = in.stages()[in.stages().length - 1];
-		final double lastStageRelativeHumidity = lastStage.relativeHumidity();
-		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStageRelativeHumidity, gab,
+		final double lastStageRH = lastStage.relativeHumidity();
+		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStageRH, gab,
 			baseMaxGasPotential, in, foldHandler);
-		finalOde.computeDerivatives(currentTime, y, yDotFinal);
+		finalOde.computeDerivatives(totalMinutes, y, yDotFinal);
 
-		// Apply skinning and surface adjustments from the final ambient humidity
-		final double skinningModifier = DoughOdeSystem.skinningModifier(lastStageRelativeHumidity);
-		final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, in.folds().length)
+		final double skinningModifier = DoughOdeSystem.skinningModifier(lastStageRH);
+		final double dynamicMaxPotential = baseMaxGasPotential
+			* Math.pow(FoldEventHandler.STRUCTURAL_GAIN, appliedFolds)
 			* skinningModifier;
 
-		// Delegates the specific cost target directly to your BakeryProduct enum structure
-		return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1], y[0], yDotFinal[2]);
+		// Pass oilRatio and appliedFolds so the new reward terms can act on them
+		return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1], y[0], yDotFinal[2],
+			in.recipe().oilRatio(), appliedFolds, FoldEventHandler.DEGASSING_RETENTION);
 	}
 
 	/**
@@ -243,8 +246,8 @@ public class YeastOptimizer{
 
 		final double kneadingEfficiency = in.kneading().type().getDevelopmentEfficiency();
 
-		return blendW * targetProduct.getGlutenTearingLimit() * 0.05 * kneadingEfficiency * plModifier * ashModifier
-			* lipidModifier;
+		return blendW * targetProduct.getGlutenTearingLimit() * 0.05 * kneadingEfficiency * plModifier
+			* ashModifier * lipidModifier;
 	}
 
 	public static double[] inputsSummary(final SimulationInputs in){

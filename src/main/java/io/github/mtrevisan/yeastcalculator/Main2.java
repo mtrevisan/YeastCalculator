@@ -57,11 +57,10 @@ public class Main2{
 
 		// 5. Multi-stage fermentation schedule (Hard constraints set by user)
 		final StageInput[] stages = {
-			// 4.1 hours warm maturation profile at 28 °C
-			new StageInput(24., 0.75, 4.6)
+			new StageInput(28., 0.75, 5.29)
 		};
 
-		// 6. Physical structural interventions (Stretch & Fold timestamps in hours)
+		// 6. Physical structural interventions (Stretch & Fold timestamps in minutes)
 		// The placeholder array inside initialInputs is sent as empty; BOBYQA will generate it dynamically
 		final double[] placeholderFolds = new double[0];
 
@@ -87,8 +86,10 @@ public class Main2{
 
 		// Reconstruct runtime fold vector array from optimized output points to run verification pass
 		final int optimizedFoldCount = result.optimizedFoldCount();
-		final double currentDelay = result.optimizedFoldInterval();
-		final double[] optimizedFoldsArray = FullRecipeMultivariateObjective.buildFoldSchedule(optimizedFoldCount, currentDelay);
+		final double optimizedInitialDelay = result.optimizedFoldInitialDelay();
+		final double optimizedRelaxationFactor = result.optimizedRelaxationFactor();
+		final double[] optimizedFoldsArray = FullRecipeMultivariateObjective.buildFoldSchedule(optimizedFoldCount,
+			optimizedInitialDelay, optimizedRelaxationFactor);
 
 		// Reconstruct final optimized input payload for validation and diagnostic logging
 		final SimulationInputs optimizedInputs = new SimulationInputs(fractions, flourMatrix, flourTemperature,
@@ -111,8 +112,8 @@ public class Main2{
 		System.out.println("----------------------------------------------------");
 		System.out.printf("Optimized S&F Count  : %d sets\n", optimizedFoldCount);
 		if(optimizedFoldCount > 0){
-			System.out.printf("Optimized First Delay: %.1f minutes after mixing\n", result.optimizedFoldInterval());
-			System.out.println("Optimized S&F Style  : Geometric Relaxation Curve (1.4x factor scaling)");
+			System.out.printf("Optimized First Delay: %.1f minutes after mixing\n", result.optimizedFoldInitialDelay());
+			System.out.printf("Optimized Relaxation : %.2fx geometric scaling\n", optimizedRelaxationFactor);
 			System.out.println("\n--- MECHANICAL STEP-BY-STEP WORKBOOK ---");
 			for(int i = 0; i < optimizedFoldCount; i ++){
 				BakeryProduct.HandlingInstruction stepInfo = selectedProduct.getHandlingInstructions((i + 1),
@@ -191,7 +192,6 @@ public class Main2{
 
 		// [hours]
 		double estimatedRequired = (blendW / 300.) * 6.;
-
 		final double waterRatio = inputs.recipe().waterRatio();
 		if(waterRatio >= 0.70)
 			estimatedRequired *= 0.85;

@@ -13,8 +13,11 @@ import java.util.Arrays;
  */
 public class FoldEventHandler implements EventHandler{
 
-	// Fraction of the retained gas that survives a fold (partial degassing)
-	public static final double DEGASSING_RETENTION = 0.85;
+	// Fraction of the retained gas that survives a fold (partial degassing).
+	// A manual stretch-and-fold loses 5-8% of the accumulated gas (Hamelman, Bread, 2nd ed.;
+	// Reinhart, The Bread Baker's Apprentice). The previous value of 0.85 (15% loss) was the
+	// upper end of the observed range and systematically penalized folds in the optimizer.
+	public static final double DEGASSING_RETENTION = 0.92;
 	// Multiplicative gain of the gluten gas-holding potential after each fold
 	public static final double STRUCTURAL_GAIN = 1.05;
 
@@ -25,7 +28,7 @@ public class FoldEventHandler implements EventHandler{
 
 
 	public FoldEventHandler(final double[] foldTimestamps){
-		this.foldTimestamps = foldTimestamps;
+		this.foldTimestamps = foldTimestamps.clone();
 		Arrays.sort(this.foldTimestamps);
 	}
 
@@ -34,17 +37,28 @@ public class FoldEventHandler implements EventHandler{
 		return currentGasPotentialModifier;
 	}
 
+	public int getAppliedFolds(){
+		return appliedFolds;
+	}
+
+	/**
+	 * Advances the internal potential modifier (and applied fold counter) as if all folds whose timestamp
+	 * is less than or equal to {@code timeInMinutes} had already been triggered.
+	 * <p>
+	 * Does NOT modify the state vector y (no degassing is applied here), which is exactly what we want when
+	 * recomputing the final gas retention ceiling for the fitness evaluation at the timeline endpoint.
+	 * </p>
+	 */
+	public void advanceFoldsUpTo(final double timeInMinutes){
+		while(appliedFolds < foldTimestamps.length && foldTimestamps[appliedFolds] <= timeInMinutes){
+			currentGasPotentialModifier *= STRUCTURAL_GAIN;
+			appliedFolds ++;
+		}
+	}
+
 	@Override
 	public void init(final double t0, final double[] y0, final double t){}
 
-	/**
-	 * Switching function that crosses zero only at the next pending fold.
-	 * <p>
-	 * The sign is flipped after every applied fold so that g stays continuous across the reset (it is positive right
-	 * after an odd number of folds and negative right after an even one). A "nearest fold" distance would instead jump
-	 * from +d to -d halfway between two folds, which the integrator detects as a spurious extra fold.
-	 * </p>
-	 */
 	@Override
 	public double g(final double t, final double[] y){
 		final double sign = (appliedFolds % 2 == 0? 1.: -1.);
