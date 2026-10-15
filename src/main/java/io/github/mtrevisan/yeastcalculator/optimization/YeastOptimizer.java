@@ -25,21 +25,6 @@ import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
 public class YeastOptimizer{
 
 	/**
-	 * Diagnostic utility to return the exact calculated optimal rehydration window bounds (in minutes).
-	 * @return An array containing [MinOptimalMinutes, MaxOptimalMinutes]
-	 */
-	public static double[] calculateOptimalRehydrationWindow(final double yeastMoisture){
-		if(yeastMoisture >= 0.65)
-			// Fresh yeast block: cells are already active. Optimal use is immediate (0 mins).
-			// Starvation stress triggers if floating in pure water without substrates for more than 15 mins.
-			return new double[]{0.0, 15.0};
-		else
-			// Dry mummified yeast: requires strict structural re-swelling time to protect cell walls.
-			// Optimal window is exactly between 9.6 minutes (0.16h) and 30 minutes (0.50h).
-			return new double[]{0.16 * 60.0, 0.50 * 60.0};
-	}
-
-	/**
 	 * Finds the optimal initial yeast ratio using a Brent Optimizer.
 	 */
 	public static double findOptimalYeast(final SimulationInputs in, final BakeryProduct targetProduct,
@@ -171,28 +156,40 @@ public class YeastOptimizer{
 			final double baseMaxGasPotential, final double yeastRatio,
 			final PrefermentPlugin.StatePreConditioner preConditioner){
 		final YeastInput yeastInput = in.yeastProperties();
-		final double rehydrationWindow = (preConditioner == null? yeastInput.getRehydrationWindow() / 60.: 0.);
 		final double yeastMoisture = yeastInput.yeastMoisture();
+
+		// Rehydration efficiency modifier: reduces the effective initial biomass if the cell has
+		// not completed its osmotic swelling, or if it has been left in pure water for so long
+		// that autolysis and starvation stress have started. The biologically acceptable window
+		// is provided by YeastInput so the optimization layer stays free of domain knowledge.
+		//
+		// If a PrefermentPlugin preconditioner is present, the plugin has already handled the
+		// rehydration (for example through a Poolish or Biga phase) and the initial state is
+		// set directly by preConditioner.applyToInitialState. In that case the rehydration
+		// penalty is skipped entirely to avoid double-counting the plugin's work.
 		double rehydrationEfficiencyModifier = 1.;
-		if(yeastMoisture >= 0.65){
-			// --- FRESH YEAST PATHWAY (e.g., 70% moisture panetto) ---
-			// Cells are awake and active. If left floating in pure water without substrates for too long,
-			// autolysis and early starvation acceleration triggers.
-			// More than 15 minutes in pure water solvent matrix
-			if(rehydrationWindow > 0.25)
-				rehydrationEfficiencyModifier = Math.max(0.4, 1. - (rehydrationWindow - 0.25) * 0.8);
-		}
-		else{
-			// --- DEHYDRATED DRY YEAST PATHWAY (e.g., active dry yeast) ---
-			// Structural mummified cells require a rigid timeline to safely re-swell membrane proteins.
-			// Approx 9.6 minutes threshold limit
-			final double minRequiredRehydrationWindow = 0.16;
-			if(rehydrationWindow < minRequiredRehydrationWindow)
-				// Penalty for dry cell shear trauma
-				rehydrationEfficiencyModifier = 0.6 + (rehydrationWindow / minRequiredRehydrationWindow) * 0.4;
-			else if(rehydrationWindow > 0.50)
-				// Starvation envelope after 30 mins
-				rehydrationEfficiencyModifier = Math.max(0.5, 1. - (rehydrationWindow - 0.50) * 0.4);
+		if(preConditioner == null){
+			final double rehydrationWindowHours = yeastInput.getRehydrationWindow() / 60.;
+			final double[] optimalWindow = yeastInput.getOptimalRehydrationWindow();
+			final double minHours = optimalWindow[0] / 60.;
+			final double maxHours = optimalWindow[1] / 60.;
+
+			if(yeastMoisture >= 0.65){
+				// --- FRESH YEAST PATHWAY (e.g., 70% moisture panetto) ---
+				// Cells are awake and active. If left floating in pure water without substrates
+				// for too long, autolysis and early starvation acceleration triggers.
+				if(rehydrationWindowHours > maxHours)
+					rehydrationEfficiencyModifier = Math.max(0.4, 1. - (rehydrationWindowHours - maxHours) * 0.8);
+			}
+			else{
+				// --- DEHYDRATED DRY YEAST PATHWAY (e.g., active dry yeast) ---
+				// Structural mummified cells require a rigid timeline to safely re-swell membrane
+				// proteins. Below the lower bound: shear trauma. Above the upper bound: starvation.
+				if(rehydrationWindowHours < minHours)
+					rehydrationEfficiencyModifier = 0.6 + (rehydrationWindowHours / minHours) * 0.4;
+				else if(rehydrationWindowHours > maxHours)
+					rehydrationEfficiencyModifier = Math.max(0.5, 1. - (rehydrationWindowHours - maxHours) * 0.4);
+			}
 		}
 
 		// Set initial conditions for state variables: [Biomass X, Sugars S, Gas Volume V, Ethanol EtOH]

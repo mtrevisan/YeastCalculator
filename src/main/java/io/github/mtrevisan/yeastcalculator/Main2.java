@@ -77,7 +77,9 @@ public class Main2{
 		System.out.println("Selected Target Product: " + selectedProduct.name());
 		// PRINT CALCULATED TIMELINE INSIGHTS PRIOR TO EXECUTING OPTIMIZATION RAMP
 		System.out.printf("Yeast Type Target Moisture : %.1f%%\n", targetYeastMoisture * 100.);
-		System.out.printf("Rehydration Optimal Window : %.1f min\n", yeastProps.getRehydrationWindow());
+		final double[] window = yeastProps.getOptimalRehydrationWindow();
+		System.out.printf("Rehydration Recommended    : %.1f min\n", yeastProps.getRehydrationWindow());
+		System.out.printf("Rehydration Optimal Window : %.1f – %.1f min\n", window[0], window[1]);
 		System.out.println("Scanning space...\n");
 
 		// --- EXECUTE THE MULTIVARIATE SEARCH OVER CONTINUOUS BOUNDS ---
