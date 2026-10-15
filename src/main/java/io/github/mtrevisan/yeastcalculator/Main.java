@@ -58,9 +58,9 @@ public class Main{
 			new StageInput(28., 0.75, 4.5)
 		};
 
-		// 7. Physical structural interventions (Stretch & Fold timestamps in hours)
-		// Folds execution at 45m and 90m
-		final double[] folds = {0.5, 1., 1.5};
+		// 7. Physical structural interventions (Stretch & Fold timestamps in minutes, the ODE time axis)
+		// Folds execution at 30m, 60m and 90m
+		final double[] folds = {30., 60., 90.};
 
 		// Build composite simulation payload object
 		final SimulationInputs inputs = new SimulationInputs(
@@ -84,7 +84,7 @@ public class Main{
 
 		if(finalState != null){
 			System.out.println("\n--- FINAL DOUGH STATE AT TIMELINE EXPIRATION ---");
-			System.out.printf("Yeast                : %.2f%%\n", finalState[0] * 100.);
+			System.out.printf("Yeast (Dry Biomass)  : %.2f%%\n", finalState[0] * 100.);
 			System.out.printf("Sugars               : %.2f%%\n", finalState[1] * 100.);
 			System.out.printf("Retained Gas Volume  : %.1f ml/g_flour\n", finalState[2]);
 			System.out.printf("Ethanol Accumulation : %.1f g/kg_dough\n", finalState[3] * 1000.);

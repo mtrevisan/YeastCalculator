@@ -93,11 +93,24 @@ public class FullRecipeMultivariateObjective implements MultivariateFunction{
 
 		final FoldEventHandler foldHandler = new FoldEventHandler(baseInputs.folds());
 		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStage.relativeHumidity(),
-			gab.flourActiveWater, baseMaxGasPotential, candidateInputs, foldHandler);
+			gab, baseMaxGasPotential, candidateInputs, foldHandler);
 		finalOde.computeDerivatives(currentTime * 60., finalState, yDotFinal);
 
 		// Evaluate and return global multi-variable fitness cost directly from the enum
 		return targetProduct.computeFitness(finalState[2], dynamicMaxPotential, finalState[1], finalState[0], yDotFinal[2]);
+	}
+
+	public static double[] buildFoldSchedule(final int optimizedFoldCount, double currentDelay){
+		final double relaxationFactor = 1.4;
+		final double[] optimizedFoldsArray = new double[optimizedFoldCount];
+		// Serves as initial fold delay field variable mapping
+		double cumulativeMinutes = 0.;
+		for(int i = 0; i < optimizedFoldCount; i ++){
+			cumulativeMinutes += currentDelay;
+			optimizedFoldsArray[i] = cumulativeMinutes;
+			currentDelay *= relaxationFactor;
+		}
+		return optimizedFoldsArray;
 	}
 
 }

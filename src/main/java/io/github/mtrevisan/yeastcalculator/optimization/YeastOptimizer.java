@@ -69,26 +69,7 @@ public class YeastOptimizer{
 			if(y == null)
 				return Double.MAX_VALUE;
 
-			// Calculate total timeline execution
-			double currentTime = 0.;
-			for(final StageInput stage : runtimeInputs.stages())
-				currentTime += stage.duration();
-
-			final FoldEventHandler foldHandler = new FoldEventHandler(runtimeInputs.folds());
-			final double[] yDotFinal = new double[4];
-			final StageInput lastStage = runtimeInputs.stages()[runtimeInputs.stages().length - 1];
-			final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStage.relativeHumidity(),
-				gab.flourActiveWater, baseMaxGasPotential, runtimeInputs, foldHandler);
-			finalOde.computeDerivatives(currentTime * 60., y, yDotFinal);
-
-			// Apply skinning and surface adjustments from the final ambient humidity
-			final double skinningModifier = (lastStage.relativeHumidity() >= 0.70
-				? 1.
-				: Math.max(0.6, 1. - (0.70 - lastStage.relativeHumidity()) * 0.8));
-			final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, runtimeInputs.folds().length) * skinningModifier;
-
-			// Delegates the specific cost target directly to your BakeryProduct enum structure
-			return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1] ,y[0], yDotFinal[2]);
+			return evaluateFitness(runtimeInputs, gab, baseMaxGasPotential, y, targetProduct);
 		};
 
 		final BrentOptimizer optimizer = new BrentOptimizer(1.e-6, 1.e-6);
@@ -99,6 +80,39 @@ public class YeastOptimizer{
 			// Scans from 0.05% up to 3.5% fresh yeast fractions
 			new SearchInterval(0.0005, 0.035)
 		).getPoint();
+	}
+
+	/**
+	 * Scores a final simulated state against the target product.
+	 * <p>
+	 * The end-of-timeline gas retention ceiling is rebuilt exactly as the integration saw it: the structural gain of
+	 * every fold applied within the timeline and the surface skinning of the last stage.
+	 * </p>
+	 */
+	private static double evaluateFitness(final SimulationInputs in, final GabMoistureModel.GabResult gab,
+			final double baseMaxGasPotential, final double[] y, final BakeryProduct targetProduct){
+		// Calculate total timeline execution [min]
+		double currentTime = 0.;
+		for(final StageInput stage : in.stages())
+			currentTime += stage.duration();
+		currentTime *= 60.;
+
+		final FoldEventHandler foldHandler = new FoldEventHandler(in.folds());
+		final double[] yDotFinal = new double[4];
+		// Final gas production speed: the fold gain is already in the potential, so use an exhausted fold handler
+		final StageInput lastStage = in.stages()[in.stages().length - 1];
+		final double lastStageRelativeHumidity = lastStage.relativeHumidity();
+		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStageRelativeHumidity, gab,
+			baseMaxGasPotential, in, foldHandler);
+		finalOde.computeDerivatives(currentTime, y, yDotFinal);
+
+		// Apply skinning and surface adjustments from the final ambient humidity
+		final double skinningModifier = DoughOdeSystem.skinningModifier(lastStageRelativeHumidity);
+		final double dynamicMaxPotential = baseMaxGasPotential * Math.pow(1.05, in.folds().length)
+			* skinningModifier;
+
+		// Delegates the specific cost target directly to your BakeryProduct enum structure
+		return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1], y[0], yDotFinal[2]);
 	}
 
 	/**
@@ -140,7 +154,7 @@ public class YeastOptimizer{
 			final double baseMaxGasPotential, final double yeastRatio,
 			final PrefermentPlugin.StatePreConditioner preConditioner){
 		final YeastInput yeastInput = in.yeastProperties();
-		final double rehydrationWindow = (preConditioner == null? yeastInput.getRehydrationWindow(): 0.);
+		final double rehydrationWindow = (preConditioner == null? yeastInput.getRehydrationWindow() / 60.: 0.);
 		final double yeastMoisture = yeastInput.yeastMoisture();
 		double rehydrationEfficiencyModifier = 1.;
 		if(yeastMoisture >= 0.65){
@@ -187,7 +201,7 @@ public class YeastOptimizer{
 		final FoldEventHandler foldHandler = new FoldEventHandler(in.folds());
 		for(final StageInput stage : in.stages()){
 			final DoughOdeSystem ode = new DoughOdeSystem(stage.temperature(), stage.relativeHumidity(),
-				gab.flourActiveWater, baseMaxGasPotential, in, foldHandler);
+				gab, baseMaxGasPotential, in, foldHandler);
 			// Variable-step size integrator setup
 			final DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.e-4, 0.1,
 				1.e-5, 1.e-5);

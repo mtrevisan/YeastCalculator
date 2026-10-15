@@ -69,7 +69,7 @@ public class GlobalMultivariateRecipeOptimizer{
 		// Strictly enforce lower and upper physical bounds to maintain culinary and rheological safety
 		// Min: 50% Hydr, 1.8% Salt, 0% Oil, 0% Malt, Min 0 folds, 15 min apart
 		final double[] lowerBounds = new double[]{0.50, 0.018, 0., 0., 0., 15.};
-		// Max: 85% Hydr, 3.2% Salt, 10% Oil, 1.5% Malt, Max 5 folds, 60 min apart
+		// Max: WAC-capped Hydr, 3.2% Salt, 10% Oil, 1.5% Malt, Max 5 folds, 60 min apart
 		final double[] upperBounds = new double[]{dynamicHydrationCap, 0.032, 0.1, 0.015, 5., 60.};
 
 		final FullRecipeMultivariateObjective objective = new FullRecipeMultivariateObjective(baseInputs, targetProduct);

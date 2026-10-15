@@ -8,6 +8,7 @@ import io.github.mtrevisan.yeastcalculator.domain.KneadingInput;
 import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
 import io.github.mtrevisan.yeastcalculator.domain.StageInput;
 import io.github.mtrevisan.yeastcalculator.domain.YeastInput;
+import io.github.mtrevisan.yeastcalculator.optimization.FullRecipeMultivariateObjective;
 import io.github.mtrevisan.yeastcalculator.optimization.GlobalMultivariateRecipeOptimizer;
 import io.github.mtrevisan.yeastcalculator.optimization.YeastOptimizer;
 import io.github.mtrevisan.yeastcalculator.thermodynamic.GabMoistureModel;
@@ -77,7 +78,7 @@ public class Main2{
 		System.out.println("Selected Target Product: " + selectedProduct.name());
 		// PRINT CALCULATED TIMELINE INSIGHTS PRIOR TO EXECUTING OPTIMIZATION RAMP
 		System.out.printf("Yeast Type Target Moisture : %.1f%%\n", targetYeastMoisture * 100.);
-		System.out.printf("Rehydration Optimal Window : %s\n", yeastProps.getRehydrationWindow() * 60.);
+		System.out.printf("Rehydration Optimal Window : %.1f min\n", yeastProps.getRehydrationWindow());
 		System.out.println("Scanning space...\n");
 
 		// --- EXECUTE THE MULTIVARIATE SEARCH OVER CONTINUOUS BOUNDS ---
@@ -85,16 +86,9 @@ public class Main2{
 			GlobalMultivariateRecipeOptimizer.optimizeFullRecipe(initialInputs, selectedProduct);
 
 		// Reconstruct runtime fold vector array from optimized output points to run verification pass
-		final double relaxationFactor = 1.4;
-		final double[] optimizedFoldsArray = new double[result.optimizedFoldCount()];
-		// Serves as initial fold delay field variable mapping
-		double currentDelay = result.optimizedFoldInterval();
-		double cumulativeMinutes = 0.;
-		for(int i = 0; i < result.optimizedFoldCount(); i ++){
-			cumulativeMinutes += currentDelay;
-			optimizedFoldsArray[i] = cumulativeMinutes;
-			currentDelay *= relaxationFactor;
-		}
+		final int optimizedFoldCount = result.optimizedFoldCount();
+		final double currentDelay = result.optimizedFoldInterval();
+		final double[] optimizedFoldsArray = FullRecipeMultivariateObjective.buildFoldSchedule(optimizedFoldCount, currentDelay);
 
 		// Reconstruct final optimized input payload for validation and diagnostic logging
 		final SimulationInputs optimizedInputs = new SimulationInputs(fractions, flourMatrix, flourTemperature,
@@ -115,14 +109,14 @@ public class Main2{
 		System.out.printf("Optimized Malt Ratio : %.2f%%\n", result.recipe().maltRatio() * 100.);
 		System.out.printf("Optimal Starter Yeast: %.2f%%\n", result.optimalYeastRatio() * 100.);
 		System.out.println("----------------------------------------------------");
-		System.out.printf("Optimized S&F Count  : %d sets\n", result.optimizedFoldCount());
-		if(result.optimizedFoldCount() > 0){
+		System.out.printf("Optimized S&F Count  : %d sets\n", optimizedFoldCount);
+		if(optimizedFoldCount > 0){
 			System.out.printf("Optimized First Delay: %.1f minutes after mixing\n", result.optimizedFoldInterval());
 			System.out.println("Optimized S&F Style  : Geometric Relaxation Curve (1.4x factor scaling)");
 			System.out.println("\n--- MECHANICAL STEP-BY-STEP WORKBOOK ---");
-			for(int i = 0; i < result.optimizedFoldCount(); i ++){
+			for(int i = 0; i < optimizedFoldCount; i ++){
 				BakeryProduct.HandlingInstruction stepInfo = selectedProduct.getHandlingInstructions((i + 1),
-					result.optimizedFoldCount(), optimizedFoldsArray[i]);
+					optimizedFoldCount, optimizedFoldsArray[i]);
 				System.out.printf("[TIMEMARK: %4.1f min] -> SET %d: %s (Intensity: %s)\n",
 					optimizedFoldsArray[i], (i + 1), stepInfo.title(), stepInfo.intensity());
 				System.out.printf("                    Action: %s\n\n", stepInfo.instructions());
@@ -135,7 +129,7 @@ public class Main2{
 
 		if(finalState != null){
 			System.out.println("\n--- FINAL DOUGH STATE AT TIMELINE EXPIRATION ---");
-			System.out.printf("Yeast (Active Matter): %.2f%%\n", finalState[0] * 100.);
+			System.out.printf("Yeast (Dry Biomass)  : %.2f%%\n", finalState[0] * 100.);
 			System.out.printf("Sugars Remaining     : %.1f%%\n", finalState[1] * 100.);
 			System.out.printf("Retained Gas Volume  : %.1f ml/g_flour\n", finalState[2]);
 			System.out.printf("Ethanol Accumulation : %.1f g/kg_dough\n", finalState[3] * 1000.);
@@ -204,7 +198,7 @@ public class Main2{
 		else if(waterRatio <= 0.55)
 			estimatedRequired *= 1.15;
 
-		if(Math.abs(totalDuration - estimatedRequired) >= 0.01){
+		if(totalDuration < estimatedRequired){
 			System.out.printf("[WARNING] Insufficient maturation window for this flour strength (W: %.0f).\n", blendW);
 			System.out.printf("          Required: ~%.2f h, Provided: %.2f h.\n", estimatedRequired, totalDuration);
 			System.out.println("          Result: The gluten mesh will remain overly tense, causing high springback (elastic snap)");
