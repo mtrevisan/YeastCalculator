@@ -89,7 +89,7 @@ public class YeastOptimizer{
 	 * every fold applied within the timeline and the surface skinning of the last stage.
 	 * </p>
 	 */
-	private static double evaluateFitness(final SimulationInputs in, final GabMoistureModel.GabResult gab,
+	static double evaluateFitness(final SimulationInputs in, final GabMoistureModel.GabResult gab,
 			final double baseMaxGasPotential, final double[] y, final BakeryProduct targetProduct){
 		// Calculate total timeline execution [min]
 		double totalMinutes = 0.;
@@ -97,25 +97,37 @@ public class YeastOptimizer{
 			totalMinutes += stage.duration();
 		totalMinutes *= 60.;
 
-		// Only folds that actually occur within the timeline boost the final ceiling
-		final FoldEventHandler foldHandler = new FoldEventHandler(in.folds());
-		foldHandler.advanceFoldsUpTo(totalMinutes);
-		final int appliedFolds = foldHandler.getAppliedFolds();
+		// Only the folds falling inside the timeline have been applied by the integrator.
+		// Counting them manually here lets us bake the structural gain directly into the
+		// retention ceiling, without having to re-run the ODE or rebuild a stateful handler.
+		int appliedFolds = 0;
+		for(final double fold : in.folds())
+			if(fold < totalMinutes)
+				appliedFolds ++;
+
+		final FoldEventHandler foldHandler = new FoldEventHandler(new double[0]);
+
+		// Pre-multiply the structural gain of every applied fold into the base potential.
+		final double foldedMaxGasPotential = baseMaxGasPotential
+			* Math.pow(FoldEventHandler.STRUCTURAL_GAIN, appliedFolds);
 
 		final double[] yDotFinal = new double[4];
-		// Final gas production speed: the fold gain is already in the potential, so use an exhausted fold handler
+		// Final gas production speed. The structural gain is already inside foldedMaxGasPotential,
+		// so an empty fold handler is used: it contributes a modifier of exactly 1.0 and does not
+		// apply any further folds on top of the pre-multiplied ceiling.
 		final StageInput lastStage = in.stages()[in.stages().length - 1];
 		final double lastStageRH = lastStage.relativeHumidity();
 		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStageRH, gab,
-			baseMaxGasPotential, in, foldHandler);
+			foldedMaxGasPotential, in, foldHandler);
 		finalOde.computeDerivatives(totalMinutes, y, yDotFinal);
 
-		final double skinningModifier = DoughOdeSystem.skinningModifier(lastStageRH);
-		final double dynamicMaxPotential = baseMaxGasPotential
-			* Math.pow(FoldEventHandler.STRUCTURAL_GAIN, appliedFolds)
-			* skinningModifier;
+		// Apply skinning from the final ambient humidity
+		final double dynamicMaxPotential = foldedMaxGasPotential
+			* DoughOdeSystem.skinningModifier(lastStageRH);
 
-		// Pass oilRatio and appliedFolds so the new reward terms can act on them
+		// Delegate the product-specific cost to the BakeryProduct enum. The oil ratio, the number
+		// of applied folds and the degassing retention are all passed through so the enum can apply
+		// its Gaussian oil and fold rewards and slide the underproof threshold by the fold count.
 		return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1], y[0], yDotFinal[2],
 			in.recipe().oilRatio(), appliedFolds, FoldEventHandler.DEGASSING_RETENTION);
 	}

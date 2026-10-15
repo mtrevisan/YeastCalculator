@@ -88,9 +88,12 @@ public class GlobalMultivariateRecipeOptimizer{
 		Arrays.fill(normalizedUpperBounds, 1.);
 
 		OptimizedRecipeResult bestResult = null;
+		double previousFitness = Double.MAX_VALUE;
 
-		// Outer loop over the discrete fold count. Each iteration runs a full 6-dimensional
-		// BOBYQA search with the fold count fixed. The result with the lowest fitness wins.
+// Outer loop over the discrete fold count. The fold reward is a Gaussian centered on a
+// product-specific optimum, so the fitness as a function of the fold count is unimodal
+// (it has a single minimum). Once the fitness starts increasing, every subsequent fold
+// count is guaranteed to be worse, so the loop can stop early without losing the optimum.
 		System.out.println("Scanning fold counts 0 to " + MAX_FOLD_SETS + "...");
 		for(int folds = 0; folds <= MAX_FOLD_SETS; folds ++){
 			final FullRecipeMultivariateObjective objective = new FullRecipeMultivariateObjective(baseInputs,
@@ -104,32 +107,41 @@ public class GlobalMultivariateRecipeOptimizer{
 				new InitialGuess(objective.normalize(initialGuess)),
 				new SimpleBounds(normalizedLowerBounds, normalizedUpperBounds));
 
+			final double currentFitness = optimum.getValue();
 			final double[] p = objective.denormalize(optimum.getPoint());
 
-			final DoughRecipe candidateRecipe = new DoughRecipe(p[0], p[1], p[2], p[3],
-				baseInputs.recipe().maltSugarContent(), baseInputs.recipe().maltPollakUnit(),
-				baseInputs.recipe().mixerFrictionFactor());
-
-			final double candidateDelay = p[4];
-			final double candidateRelaxation = p[5];
-			final double[] candidateFolds = FullRecipeMultivariateObjective.buildFoldSchedule(folds,
-				candidateDelay, candidateRelaxation);
-
-			final SimulationInputs finalInputs = new SimulationInputs(baseInputs.fractions(),
-				baseInputs.flourMatrix(), baseInputs.flourTemperature(), baseInputs.airRelativeHumidity(),
-				baseInputs.yeastProperties(), candidateRecipe, baseInputs.kneading(), baseInputs.stages(),
-				candidateFolds);
-
-			final double bestYeast = YeastOptimizer.findOptimalYeast(finalInputs, targetProduct, null);
-
-			final OptimizedRecipeResult candidate = new OptimizedRecipeResult(candidateRecipe, bestYeast,
-				optimum.getValue(), folds, candidateDelay, candidateRelaxation);
-
 			System.out.printf("  folds=%d -> fitness=%.4f (hydration=%.1f%%, salt=%.2f%%, oil=%.2f%%, malt=%.2f%%)\n",
-				folds, optimum.getValue(), p[0] * 100., p[1] * 100., p[2] * 100., p[3] * 100.);
+				folds, currentFitness, p[0] * 100., p[1] * 100., p[2] * 100., p[3] * 100.);
 
-			if(bestResult == null || candidate.finalFitness() < bestResult.finalFitness())
-				bestResult = candidate;
+			// Keep the best result seen so far
+			if(bestResult == null || currentFitness < bestResult.finalFitness()){
+				final DoughRecipe candidateRecipe = new DoughRecipe(p[0], p[1], p[2], p[3],
+					baseInputs.recipe().maltSugarContent(), baseInputs.recipe().maltPollakUnit(),
+					baseInputs.recipe().mixerFrictionFactor());
+
+				final double candidateDelay = p[4];
+				final double candidateRelaxation = p[5];
+				final double[] candidateFolds = FullRecipeMultivariateObjective.buildFoldSchedule(folds,
+					candidateDelay, candidateRelaxation);
+
+				final SimulationInputs finalInputs = new SimulationInputs(baseInputs.fractions(),
+					baseInputs.flourMatrix(), baseInputs.flourTemperature(), baseInputs.airRelativeHumidity(),
+					baseInputs.yeastProperties(), candidateRecipe, baseInputs.kneading(), baseInputs.stages(),
+					candidateFolds);
+
+				final double bestYeast = YeastOptimizer.findOptimalYeast(finalInputs, targetProduct, null);
+
+				bestResult = new OptimizedRecipeResult(candidateRecipe, bestYeast, currentFitness, folds,
+					candidateDelay, candidateRelaxation);
+			}
+
+			// Early termination: once the fitness has increased relative to the previous fold count,
+			// and we have already passed the optimum, every subsequent fold count will be worse.
+			// The Gaussian reward makes the fold-fitness curve symmetric, so this is safe.
+			if(currentFitness > previousFitness + 1.e-3)
+				break;
+
+			previousFitness = currentFitness;
 		}
 
 		return bestResult;
