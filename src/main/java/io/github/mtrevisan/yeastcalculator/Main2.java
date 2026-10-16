@@ -102,7 +102,8 @@ public class Main2{
 		System.out.println("====================================================");
 		System.out.println("           GLOBAL OPTIMIZED RECIPE                  ");
 		System.out.println("====================================================");
-		System.out.printf("Optimized Hydration  : %.1f%%\n", result.recipe().waterRatio() * 100.);
+		System.out.printf("Optimized Hydration  : %.1f%% (style range %.0f%%-%.0f%%)\n", result.recipe().waterRatio() * 100.,
+			selectedProduct.getMinHydration() * 100., selectedProduct.getMaxHydration() * 100.);
 		System.out.printf("Optimized Salt Ratio : %.1f%%\n", result.recipe().saltRatio() * 100.);
 		System.out.printf("Optimized Oil Ratio  : %.1f%%\n", result.recipe().oilRatio() * 100.);
 		System.out.printf("Optimized Malt Ratio : %.2f%%\n", result.recipe().maltRatio() * 100.);
@@ -123,6 +124,9 @@ public class Main2{
 		}
 		else
 			System.out.println("Optimized S&F Timing : 0 sets (No mechanical folding required for this profile)");
+		System.out.printf("Gluten Development   : %.2f (required %.2f at this hydration)\n",
+			YeastOptimizer.calculateDevelopmentIndex(kneading, result.optimizedFoldCount()),
+			BakeryProduct.requiredDevelopment(result.recipe().waterRatio()));
 		System.out.println("----------------------------------------------------");
 		System.out.printf("Global Fitness Score : %.4f\n", result.finalFitness());
 

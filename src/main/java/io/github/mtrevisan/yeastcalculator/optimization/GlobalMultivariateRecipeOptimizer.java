@@ -29,6 +29,8 @@ public class GlobalMultivariateRecipeOptimizer{
 	private static final double INITIAL_TRUST_REGION_RADIUS = 0.2;
 	private static final double STOPPING_TRUST_REGION_RADIUS = 1.e-4;
 	private static final int MAX_EVALUATIONS = 300;
+	// Minimum width of the hydration search interval [g_water/g_flour]
+	private static final double MIN_HYDRATION_SEARCH_WIDTH = 0.03;
 
 
 	public static OptimizedRecipeResult optimizeFullRecipe(final SimulationInputs baseInputs,
@@ -52,14 +54,8 @@ public class GlobalMultivariateRecipeOptimizer{
 		// Predictive Water Absorption Capacity (WAC) baseline linear regression formula:
 		// Proteins absorb ~1.3x their dry weight, fibers absorb ~2.1x, damaged starch absorbs ~2.5x.
 		final double baselineWac = 0.46 + 1.35 * blendedProtein + 2.10 * blendedFiber + 2.50 * estimatedDamagedStarch;
-		// Adjust absorption cell ceiling slightly based on product style tolerances (e.g. Pan pizza handles more water than freestanding loaves)
-		double dynamicHydrationCap = baselineWac;
-		if(targetProduct == BakeryProduct.ROMAN_PAN_PIZZA)
-			// High aeration pan styles can push boundaries via mechanical support
-			dynamicHydrationCap += 0.08;
-		else if(targetProduct == BakeryProduct.NEAPOLITAN_PIZZA)
-			// Rigid upper bounds limit to safeguard hand stretching structural integrity
-			dynamicHydrationCap = Math.min(dynamicHydrationCap, 0.68);
+		// Container-baked styles can carry extra water thanks to the mechanical support of the pan walls
+		double dynamicHydrationCap = baselineWac + targetProduct.getPanSupportHydrationBonus();
 
 		// Hard physical constraints boundaries clamp
 		dynamicHydrationCap = Math.clamp(dynamicHydrationCap, 0.55, 0.88);
@@ -67,15 +63,27 @@ public class GlobalMultivariateRecipeOptimizer{
 		// Diagnostic info track printout
 		System.out.printf("Flour Blend WAC resolved. Dynamically clamping Hydration Cap to: %.1f%%\n", dynamicHydrationCap * 100.);
 
+		// --- HYDRATION SEARCH RANGE: STYLE RANGE INTERSECTED WITH THE FLOUR CAPACITY ---
+		double minHydration = targetProduct.getMinHydration();
+		final double maxHydration = Math.min(targetProduct.getMaxHydration(), dynamicHydrationCap);
+		if(maxHydration - minHydration < MIN_HYDRATION_SEARCH_WIDTH){
+			// The flour cannot absorb the water the style needs: search just below the flour capacity instead
+			minHydration = maxHydration - MIN_HYDRATION_SEARCH_WIDTH;
+			System.out.printf("[WARNING] Flour blend too weak for %s: style range %.0f%%-%.0f%%, flour capacity %.1f%%.\n",
+				targetProduct.name(), targetProduct.getMinHydration() * 100., targetProduct.getMaxHydration() * 100.,
+				dynamicHydrationCap * 100.);
+		}
+		System.out.printf("Hydration search range resolved to: %.1f%% - %.1f%%\n", minHydration * 100., maxHydration * 100.);
+
 		// Search Vector layout: [Hydration, Salt, Oil, Malt, InitialFoldDelayMinutes]
-		// Self-correct initial guess if it exceeds our newly calculated ceiling cap
-		final double safeInitialHydration = Math.min(0.62, dynamicHydrationCap - 0.02);
-		final double[] initialGuess = new double[]{safeInitialHydration, 0.022, 0.02, 0.002, 20.};
+		// Start from the center of the hydration search range
+		final double initialHydration = (minHydration + maxHydration) / 2.;
+		final double[] initialGuess = new double[]{initialHydration, 0.022, 0.02, 0.002, 20.};
 		// Strictly enforce lower and upper physical bounds to maintain culinary and rheological safety
-		// Min: 50% Hydr, 1.8% Salt, 0% Oil, 0% Malt, 15 min first fold delay
-		final double[] lowerBounds = new double[]{0.50, 0.018, 0., 0., 15.};
-		// Max: WAC-capped Hydr, 3.2% Salt, 10% Oil, 1.5% Malt, 60 min first fold delay
-		final double[] upperBounds = new double[]{dynamicHydrationCap, 0.032, 0.1, 0.015, 60.};
+		// Min: style/flour Hydr, 1.8% Salt, 0% Oil, 0% Malt, 15 min first fold delay
+		final double[] lowerBounds = new double[]{minHydration, 0.018, 0., 0., 15.};
+		// Max: style/flour Hydr, 3.2% Salt, 10% Oil, 1.5% Malt, 60 min first fold delay
+		final double[] upperBounds = new double[]{maxHydration, 0.032, 0.1, 0.015, 60.};
 
 		// The fold count is an integer (rounding it inside a continuous search makes the objective a step function that
 		// BOBYQA cannot model): run an independent continuous search for each count and keep the best one

@@ -15,20 +15,51 @@ public class FoldEventHandler implements EventHandler{
 
 	// Fraction of the retained gas that survives a fold (partial degassing)
 	public static final double DEGASSING_RETENTION = 0.85;
-	// Multiplicative gain of the gluten gas-holding potential after each fold
-	public static final double STRUCTURAL_GAIN = 1.05;
+	// Fraction of the residual gluten underdevelopment recovered by each fold set
+	public static final double DEVELOPMENT_GAIN = 0.2;
+	// Gas retention factor of a completely undeveloped network (a fully developed one has factor 1)
+	private static final double MIN_GAS_RETENTION_FACTOR = 0.6;
 
 	private final double[] foldTimestamps;
+	// Gluten development index reached by kneading alone, before any fold
+	private final double initialDevelopment;
 	// Number of folds already applied; the handler is shared across stage integrators, so this survives stage changes
 	private int appliedFolds;
 	private double currentGasPotentialModifier = 1.;
 
 
-	public FoldEventHandler(final double[] foldTimestamps){
+	/**
+	 * @param foldTimestamps	Fold times [min].
+	 * @param initialDevelopment	Gluten development index reached by kneading alone, in [0, 1].
+	 */
+	public FoldEventHandler(final double[] foldTimestamps, final double initialDevelopment){
 		this.foldTimestamps = foldTimestamps.clone();
 		Arrays.sort(this.foldTimestamps);
+		this.initialDevelopment = initialDevelopment;
 	}
 
+
+	/**
+	 * Gluten development index after a number of fold sets: each set recovers a fixed fraction of the residual
+	 * underdevelopment, so folds matter a lot after a gentle hand mix and very little after a full machine mix.
+	 */
+	public static double developmentAfterFolds(final double initialDevelopment, final int folds){
+		return 1. - (1. - initialDevelopment) * Math.pow(1. - DEVELOPMENT_GAIN, folds);
+	}
+
+	/**
+	 * Fraction of the full gas-holding capacity available to a gluten network with the given development index.
+	 */
+	public static double gasRetentionFactor(final double developmentIndex){
+		return MIN_GAS_RETENTION_FACTOR + (1. - MIN_GAS_RETENTION_FACTOR) * developmentIndex;
+	}
+
+	/**
+	 * Gain of the gas-holding potential produced by a number of fold sets, relative to the kneaded-only network.
+	 */
+	public static double foldGasPotentialGain(final double initialDevelopment, final int folds){
+		return gasRetentionFactor(developmentAfterFolds(initialDevelopment, folds)) / gasRetentionFactor(initialDevelopment);
+	}
 
 	public double getCurrentGasPotentialModifier(){
 		return currentGasPotentialModifier;
@@ -64,9 +95,9 @@ public class FoldEventHandler implements EventHandler{
 	public void resetState(final double t, final double[] y){
 		// Partial stable gas degassing
 		y[2] = y[2] * DEGASSING_RETENTION;
-		// Elastic structural gain
-		currentGasPotentialModifier *= STRUCTURAL_GAIN;
+		// Elastic structural gain from the additional gluten development
 		appliedFolds ++;
+		currentGasPotentialModifier = foldGasPotentialGain(initialDevelopment, appliedFolds);
 	}
 
 }

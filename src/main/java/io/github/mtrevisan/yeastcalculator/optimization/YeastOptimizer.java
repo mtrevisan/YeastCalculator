@@ -1,7 +1,9 @@
 package io.github.mtrevisan.yeastcalculator.optimization;
 
 import io.github.mtrevisan.yeastcalculator.domain.BakeryProduct;
+import io.github.mtrevisan.yeastcalculator.domain.DoughRecipe;
 import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
+import io.github.mtrevisan.yeastcalculator.domain.KneadingInput;
 import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
 import io.github.mtrevisan.yeastcalculator.domain.StageInput;
 import io.github.mtrevisan.yeastcalculator.domain.YeastInput;
@@ -23,6 +25,14 @@ import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
  * Dynamically computes rehydration limits based on current cell moisture characteristics.
  */
 public class YeastOptimizer{
+
+	// Density of a freshly mixed dough [g/mL]
+	private static final double DOUGH_DENSITY = 1.2;
+	// Flour strength W at which the gluten strength factor reaches half of its saturation value
+	private static final double W_HALF_SATURATION = 150.;
+	// Scale of the maximum gas volume per unit of dough volume, calibrated so that proofing each style to its target
+	// fraction of the potential yields realistic rises (~2x Neapolitan balls, ~3x pan pizza and bread loaves)
+	private static final double EXPANSION_SCALE = 4.5;
 
 	/**
 	 * Diagnostic utility to return the exact calculated optimal rehydration window bounds (in minutes).
@@ -101,12 +111,14 @@ public class YeastOptimizer{
 		for(final double fold : in.folds())
 			if(fold < totalMinutes)
 				appliedFolds ++;
-		final double foldedMaxGasPotential = baseMaxGasPotential * Math.pow(FoldEventHandler.STRUCTURAL_GAIN, appliedFolds);
+		final double initialDevelopment = calculateDevelopmentIndex(in.kneading(), 0);
+		final double foldedMaxGasPotential = baseMaxGasPotential
+			* FoldEventHandler.foldGasPotentialGain(initialDevelopment, appliedFolds);
 
 		// Final gas production speed: the fold gain is already in the potential, so use an exhausted fold handler
 		final StageInput lastStage = in.stages()[in.stages().length - 1];
 		final DoughOdeSystem finalOde = new DoughOdeSystem(lastStage.temperature(), lastStage.relativeHumidity(), gab,
-			foldedMaxGasPotential, in, new FoldEventHandler(new double[0]));
+			foldedMaxGasPotential, in, new FoldEventHandler(new double[0], initialDevelopment));
 		final double[] yDotFinal = new double[4];
 		finalOde.computeDerivatives(totalMinutes, y, yDotFinal);
 
@@ -115,7 +127,25 @@ public class YeastOptimizer{
 			* DoughOdeSystem.skinningModifier(lastStage.relativeHumidity());
 
 		// Delegates the specific cost target directly to your BakeryProduct enum structure
-		return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1], y[0], yDotFinal[2]);
+		final double fermentationFitness = targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1], y[0],
+			yDotFinal[2]);
+		// Formulation cost: style hydration and gluten development adequate to that hydration
+		final double developmentIndex = calculateDevelopmentIndex(in.kneading(), appliedFolds);
+		final double structuralPenalty = targetProduct.computeStructuralPenalty(in.recipe().waterRatio(),
+			developmentIndex);
+		return fermentationFitness + structuralPenalty;
+	}
+
+	/**
+	 * Gluten development index reached by mechanical work, in [0, 1].
+	 * <p>
+	 * Kneading sets the starting development, then every stretch &amp; fold set adds to it
+	 * (see {@link FoldEventHandler#developmentAfterFolds(double, int)}).
+	 * </p>
+	 */
+	public static double calculateDevelopmentIndex(final KneadingInput kneading, final int appliedFolds){
+		final double kneadingDevelopment = Math.min(1., kneading.type().getDevelopmentEfficiency());
+		return FoldEventHandler.developmentAfterFolds(kneadingDevelopment, appliedFolds);
 	}
 
 	/**
@@ -202,7 +232,7 @@ public class YeastOptimizer{
 
 		double currentTime = 0.;
 		// Create the event handler to intercept stretch and fold timestamps
-		final FoldEventHandler foldHandler = new FoldEventHandler(in.folds());
+		final FoldEventHandler foldHandler = new FoldEventHandler(in.folds(), calculateDevelopmentIndex(in.kneading(), 0));
 		for(final StageInput stage : in.stages()){
 			final DoughOdeSystem ode = new DoughOdeSystem(stage.temperature(), stage.relativeHumidity(),
 				gab, baseMaxGasPotential, in, foldHandler);
@@ -245,10 +275,18 @@ public class YeastOptimizer{
 		final double totalLipids = oilRatio + blendFat;
 		final double lipidModifier = 1. + (totalLipids <= 0.08? totalLipids * 1.5: 0.12 - (totalLipids - 0.08) * 2.);
 
-		final double kneadingEfficiency = in.kneading().type().getDevelopmentEfficiency();
+		// 4. The gas a dough can hold scales with its own volume [mL/g_flour]
+		final DoughRecipe recipe = in.recipe();
+		final double doughVolume = (1. + recipe.waterRatio() + recipe.saltRatio() + oilRatio) / DOUGH_DENSITY;
 
-		return blendW * targetProduct.getGlutenTearingLimit() * 0.05 * kneadingEfficiency * plModifier * ashModifier
-			* lipidModifier;
+		// 5. Gluten network strength saturates with W: a stronger flour holds more gas, but with diminishing returns
+		final double strengthFactor = blendW / (blendW + W_HALF_SATURATION);
+
+		// 6. Network development reached by kneading alone (folds add to it during the simulation)
+		final double developmentFactor = FoldEventHandler.gasRetentionFactor(calculateDevelopmentIndex(in.kneading(), 0));
+
+		return doughVolume * targetProduct.getGlutenTearingLimit() * EXPANSION_SCALE * strengthFactor * developmentFactor
+			* plModifier * ashModifier * lipidModifier;
 	}
 
 	public static double[] inputsSummary(final SimulationInputs in){

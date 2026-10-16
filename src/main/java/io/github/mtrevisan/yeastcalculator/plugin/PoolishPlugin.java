@@ -28,18 +28,12 @@ public class PoolishPlugin implements PrefermentPlugin{
 	public PrefermentDecorator interceptAndPreCondition(final SimulationInputs rawInputs){
 		final DoughRecipe originalRecipe = rawInputs.recipe();
 
-		// --- 1. RECIPE WATER RE-BALANCING MASS BALANCE ---
-		// A traditional Poolish uses equal weights of flour and water (100% hydration relative to itself).
-		// Water weight in Poolish = totalFlour * flourFractionInPoolish * 1.0.
-		// Therefore, the water ratio subtracted from the main recipe pool is exactly equal to the flourFraction.
-		final double waterUsedInPoolish = flourFractionInPoolish;
-		double adjustedRefreshWaterRatio = originalRecipe.waterRatio() - waterUsedInPoolish;
-		// Fallback protection to avoid unworkable negative hydration values if user configurations conflict
-		if(adjustedRefreshWaterRatio < 0.35)
-			adjustedRefreshWaterRatio = 0.35;
-
+		// --- 1. RECIPE RE-BALANCING ---
+		// The simulated phase is the final dough, which contains the Poolish water too: the total water ratio is kept.
+		// (The refresh water to add at mixing, totalWater - flourFractionInPoolish for a 100% hydration Poolish, is a
+		// scaling concern and must not lower the hydration seen by the water activity model.)
 		final DoughRecipe decoratedRecipe = new DoughRecipe(
-			adjustedRefreshWaterRatio,
+			originalRecipe.waterRatio(),
 			originalRecipe.saltRatio(),
 			originalRecipe.oilRatio(),
 			originalRecipe.maltRatio(),
@@ -96,8 +90,9 @@ public class PoolishPlugin implements PrefermentPlugin{
 
 			// Pre-generated ethanol injection accumulation (Gay-Lussac conversion yield ~48%) [Index 3 = Ethanol]
 			final double preGeneratedEthanol = actualConsumedSugar * 0.48;
-			// Diluted across total final dough mass
-			initialY[3] = preGeneratedEthanol * flourFractionInPoolish;
+			// The consumed sugar is already referred to the total flour (the budget was scaled by the Poolish flour
+			// fraction), so no further dilution applies
+			initialY[3] = preGeneratedEthanol;
 		};
 
 		return new PrefermentDecorator(decoratedInputs, preConditioner);

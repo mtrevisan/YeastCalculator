@@ -19,7 +19,7 @@ public enum BakeryProduct{
 	 * Requires strict retention of residual sugars to prevent flash charring in high-temperature ovens (450 °C+).
 	 * Strict yeast cell density caps to ensure a clean flavor profile in thin crusts.
 	 */
-	NEAPOLITAN_PIZZA(1.7, 0.009, 0.001, 25., 30.){
+	NEAPOLITAN_PIZZA(1.7, 0.009, 0.001, 25., 30., 0.58, 0.65, 0.){
 		@Override
 		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
 				final double finalYeast, final double finalYeastDot){
@@ -68,7 +68,7 @@ public enum BakeryProduct{
 	 * Requires maximizing volume while maintaining a stable gluten mesh to support heavy aeration.
 	 * Moderate yeast limit to tolerate intensive expansion without crumbling or structural collapse.
 	 */
-	ROMAN_PAN_PIZZA(2.2, 0.013, 0.002, 15., 45.){
+	ROMAN_PAN_PIZZA(2.2, 0.013, 0.002, 15., 45., 0.75, 0.85, 0.08){
 		@Override
 		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
 				final double finalYeast, final double finalYeastDot){
@@ -124,7 +124,7 @@ public enum BakeryProduct{
 	 * High sugar buffer target to sustain long baking charts at 220 °C.
 	 * Higher yeast threshold tolerated due to the protective emulsifying effects of added oils/fats.
 	 */
-	GASTRONOMY_PAN_PIZZA(2., 0.015, 0.003, 20., 50.){
+	GASTRONOMY_PAN_PIZZA(2., 0.015, 0.003, 20., 50., 0.65, 0.75, 0.04){
 		@Override
 		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
 				final double finalYeast, final double finalYeastDot){
@@ -181,7 +181,7 @@ public enum BakeryProduct{
 	 * Must maintain high elastic retention reserves to handle oven-spring expansions and scoring expansions.
 	 * Strict kinetic constraints to prevent pocket channeling and uneven baking tunnels.
 	 */
-	BREAD(1.9, 0.012, 0.0015, 20., 40.){
+	BREAD(1.9, 0.012, 0.0015, 20., 40., 0.60, 0.72, 0.){
 		@Override
 		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
 				final double finalYeast, final double finalYeastDot){
@@ -224,20 +224,42 @@ public enum BakeryProduct{
 	};
 
 
+	// Cost of a hydration at the edge of the product range (quadratic pull toward the center of the range)
+	private static final double HYDRATION_PREFERENCE_WEIGHT = 1.;
+	// Scale of the penalty for a gluten network less developed than the hydration requires
+	private static final double DEVELOPMENT_PENALTY_SCALE = 5.;
+	// Required development index = BASE + SLOPE * (hydration - REFERENCE), clamped to [MIN, MAX]
+	private static final double REQUIRED_DEVELOPMENT_BASE = 0.45;
+	private static final double REQUIRED_DEVELOPMENT_SLOPE = 1.5;
+	private static final double REQUIRED_DEVELOPMENT_REFERENCE_HYDRATION = 0.55;
+	private static final double REQUIRED_DEVELOPMENT_MIN = 0.3;
+	private static final double REQUIRED_DEVELOPMENT_MAX = 0.95;
+
+
 	private final double glutenTearingLimit;
 	private final double minSafeSugarThreshold;
 	private final double maxAllowedFinalYeast;
 	private final double tearingPenaltyMultiplier;
 	private final double starvationPenaltyMultiplier;
+	// Practical hydration range of the style [g_water/g_flour]
+	private final double minHydration;
+	private final double maxHydration;
+	// Extra water a container-baked style can carry beyond the flour absorption capacity, thanks to the mechanical
+	// support of the pan walls [g_water/g_flour]
+	private final double panSupportHydrationBonus;
 
 
 	BakeryProduct(final double glutenTearingLimit, final double minSafeSugarThreshold, final double maxAllowedFinalYeast,
-			final double tearingPenaltyMultiplier, final double starvationPenaltyMultiplier){
+			final double tearingPenaltyMultiplier, final double starvationPenaltyMultiplier, final double minHydration,
+			final double maxHydration, final double panSupportHydrationBonus){
 		this.glutenTearingLimit = glutenTearingLimit;
 		this.minSafeSugarThreshold = minSafeSugarThreshold;
 		this.maxAllowedFinalYeast = maxAllowedFinalYeast;
 		this.tearingPenaltyMultiplier = tearingPenaltyMultiplier;
 		this.starvationPenaltyMultiplier = starvationPenaltyMultiplier;
+		this.minHydration = minHydration;
+		this.maxHydration = maxHydration;
+		this.panSupportHydrationBonus = panSupportHydrationBonus;
 	}
 
 
@@ -259,6 +281,60 @@ public enum BakeryProduct{
 
 	public double getStarvationPenaltyMultiplier(){
 		return starvationPenaltyMultiplier;
+	}
+
+	public double getMinHydration(){
+		return minHydration;
+	}
+
+	public double getMaxHydration(){
+		return maxHydration;
+	}
+
+	public double getPanSupportHydrationBonus(){
+		return panSupportHydrationBonus;
+	}
+
+
+	/**
+	 * Minimum gluten development index a dough needs to hold its shape and gas at the given hydration.
+	 * <p>
+	 * Wetter doughs are slacker: the more free water dilutes the gluten network, the more mechanical development
+	 * (kneading, stretch &amp; fold) is needed to obtain a cohesive, gas-tight structure.
+	 * </p>
+	 *
+	 * @param hydration	Water ratio [g_water/g_flour].
+	 * @return	Required development index in [0, 1].
+	 */
+	public static double requiredDevelopment(final double hydration){
+		return Math.clamp(REQUIRED_DEVELOPMENT_BASE
+				+ REQUIRED_DEVELOPMENT_SLOPE * (hydration - REQUIRED_DEVELOPMENT_REFERENCE_HYDRATION),
+			REQUIRED_DEVELOPMENT_MIN, REQUIRED_DEVELOPMENT_MAX);
+	}
+
+	/**
+	 * Computes the structural cost of the dough formulation, common to every product.
+	 * <ul>
+	 *    <li>Hydration preference: quadratic pull toward the center of the style hydration range (costing 1 at the
+	 *    range edges), since crumb texture and handling are tied to the style hydration.</li>
+	 *    <li>Gluten development: a network less developed than the hydration requires (slack, spreading dough) is
+	 *    penalized proportionally to the product tearing sensitivity.</li>
+	 * </ul>
+	 *
+	 * @param hydration	Water ratio [g_water/g_flour].
+	 * @param developmentIndex	Gluten development index reached by kneading and folds, in [0, 1].
+	 * @return	Structural penalty (zero at the center of the hydration range with a fully adequate development).
+	 */
+	public double computeStructuralPenalty(final double hydration, final double developmentIndex){
+		final double targetHydration = (minHydration + maxHydration) / 2.;
+		final double halfRange = (maxHydration - minHydration) / 2.;
+		final double hydrationPenalty = HYDRATION_PREFERENCE_WEIGHT
+			* Math.pow((hydration - targetHydration) / halfRange, 2.);
+
+		final double developmentDeficit = Math.max(0., requiredDevelopment(hydration) - developmentIndex);
+		final double developmentPenalty = tearingPenaltyMultiplier * DEVELOPMENT_PENALTY_SCALE * developmentDeficit;
+
+		return hydrationPenalty + developmentPenalty;
 	}
 
 

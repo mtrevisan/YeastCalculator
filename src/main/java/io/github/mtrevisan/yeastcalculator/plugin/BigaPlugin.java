@@ -27,16 +27,12 @@ public class BigaPlugin implements PrefermentPlugin{
 	public PrefermentDecorator interceptAndPreCondition(final SimulationInputs rawInputs){
 		final DoughRecipe originalRecipe = rawInputs.recipe();
 
-		// --- 1. RECIPE WATER RE-BALANCING MASS BALANCE ---
-		// A standard Italian Biga is bound at a rigid 44% hydration relative to its specific flour weight.
-		// Water weight in Biga = totalFlour * flourFractionInBiga * 0.44.
-		final double waterUsedInBiga = flourFractionInBiga * 0.44;
-		double adjustedRefreshWaterRatio = originalRecipe.waterRatio() - waterUsedInBiga;
-		if(adjustedRefreshWaterRatio < 0.35)
-			adjustedRefreshWaterRatio = 0.35;
-
+		// --- 1. RECIPE RE-BALANCING ---
+		// The simulated phase is the final dough, which contains the Biga water too: the total water ratio is kept.
+		// (The refresh water to add at mixing, totalWater - flourFractionInBiga * 0.44 for a standard 44% hydration
+		// Biga, is a scaling concern and must not lower the hydration seen by the water activity model.)
 		final DoughRecipe decoratedRecipe = new DoughRecipe(
-			adjustedRefreshWaterRatio,
+			originalRecipe.waterRatio(),
 			originalRecipe.saltRatio(),
 			originalRecipe.oilRatio(),
 			originalRecipe.maltRatio(),
@@ -83,8 +79,9 @@ public class BigaPlugin implements PrefermentPlugin{
 			initialY[1] = Math.max(0.002, initialY[1] - actualConsumedSugar);
 
 			final double preGeneratedEthanol = actualConsumedSugar * 0.46;
-			// Ethanol EtOH
-			initialY[3] = preGeneratedEthanol * flourFractionInBiga;
+			// Ethanol EtOH: the consumed sugar is already referred to the total flour (the budget was scaled by the Biga
+			// flour fraction), so no further dilution applies
+			initialY[3] = preGeneratedEthanol;
 		};
 
 		return new PrefermentDecorator(decoratedInputs, preConditioner);
