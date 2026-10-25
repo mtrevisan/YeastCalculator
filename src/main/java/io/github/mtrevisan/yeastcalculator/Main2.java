@@ -41,11 +41,11 @@ public class Main2{
 		// 1. Definition of the Flour Blend
 		final double[] fractions = {1.};
 		final FlourInput[] flourMatrix = {
-			new FlourInput(230., 0.523, 0.014, 0.12, 0.01, 0.017, 0.003, FlourType.WHEAT)
+			new FlourInput(205., 0.523, 0.014, 0.12, 0.01, 0.017, 0.003, FlourType.WHEAT)
 		};
 
 		// 2. Structural & Storage environmental baselines
-		final double flourTemperature = 19.;
+		final double flourTemperature = 19.6;
 		final double airRelativeHumidity = 0.54;
 
 		// 3. Yeast properties
@@ -57,7 +57,7 @@ public class Main2{
 
 		// 5. Multi-stage fermentation schedule (Hard constraints set by user)
 		final StageInput[] stages = {
-			new StageInput(28., 0.75, 5.29)
+			new StageInput(28., 0.55, 5.29)
 		};
 
 		// 6. Physical structural interventions (Stretch & Fold timestamps in minutes)
@@ -215,6 +215,7 @@ public class Main2{
 		else{
 			System.out.printf("[SUCCESS] Maturation timeline (%.1f h) is well-proportioned for this blend (W: %.0f, Hydration: %.0f%%).\n",
 				totalDuration, blendW, waterRatio * 100.);
+			System.out.printf("          Estimated ~%.1f h\n", estimatedRequired);
 			System.out.println("          Result: Optimal balance between gluten extensibility and gas holding matrix tenacity.");
 		}
 	}
