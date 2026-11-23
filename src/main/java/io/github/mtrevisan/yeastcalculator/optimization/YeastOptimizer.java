@@ -1,7 +1,9 @@
 package io.github.mtrevisan.yeastcalculator.optimization;
 
 import io.github.mtrevisan.yeastcalculator.domain.BakeryProduct;
+import io.github.mtrevisan.yeastcalculator.domain.DoughRecipe;
 import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
+import io.github.mtrevisan.yeastcalculator.domain.KneadingInput;
 import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
 import io.github.mtrevisan.yeastcalculator.domain.StageInput;
 import io.github.mtrevisan.yeastcalculator.domain.YeastInput;
@@ -17,12 +19,54 @@ import org.apache.commons.math3.optim.univariate.SearchInterval;
 import org.apache.commons.math3.optim.univariate.UnivariateObjectiveFunction;
 import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
 
+import java.util.Arrays;
+
 
 /**
  * Conducts bounded search algorithms to match yeast velocity targets to structural volume plateaus.
  * Dynamically computes rehydration limits based on current cell moisture characteristics.
  */
 public class YeastOptimizer{
+
+	// Component densities used to build the dough volume from its composition [g/ml]
+	// Search range of the fresh yeast fraction: from 0.01% (a pinch, as used in 24-72 h cold fermentations and in
+	// pre-ferments) up to 3.5%
+	private static final double MIN_YEAST_RATIO = 0.0001;
+	private static final double MAX_YEAST_RATIO = 0.035;
+	// Gluten development: ceiling reachable by kneading alone, and time constant of the kneading [min]
+	private static final double MAX_KNEADING_DEVELOPMENT = 0.9;
+	private static final double KNEADING_TIME_CONSTANT = 10.;
+	// Time constant of the development reached by the autolyse [min]: 30 min close about 18% of the gap, 60 min about 33%
+	// (assumed value, to be refined with measurements)
+	private static final double AUTOLYSE_TIME_CONSTANT = 150.;
+	// Fraction of the remaining development gap closed by a fully effective stretch-and-fold set
+	private static final double FOLD_DEVELOPMENT_GAIN = 0.25;
+	// Rest after which a fold is fully effective [min], and the effectiveness of a fold given right after the
+	// previous one
+	private static final double FOLD_REST_MINUTES = 30.;
+	private static final double MIN_FOLD_EFFECTIVENESS = 0.25;
+	// Rest needed after the last fold before the end of the timeline for it to be fully effective [min]
+	private static final double FINAL_REST_MINUTES = 60.;
+	// Dry flour solids (starch ~1.5, protein ~1.3, fibers ~1.4)
+	private static final double DRY_SOLIDS_DENSITY = 1.45;
+	// Free water (the flour moisture above the GAB monolayer, and the water added by the recipe)
+	private static final double WATER_DENSITY = 1.;
+	// Water strictly bound in the GAB monolayer: it is slightly contracted with respect to the free water (approximate
+	// value, the effect on the total volume is below 1%)
+	private static final double BOUND_WATER_DENSITY = 1.2;
+	// Apparent density of salt once dissolved (partial specific volume of NaCl in water)
+	private static final double SALT_DENSITY = 2.16;
+	private static final double OIL_DENSITY = 0.92;
+	// Flour strength W at which the gluten strength factor reaches half of its saturation value
+	private static final double W_HALF_SATURATION = 150.;
+	// Scale of the gas capacity per unit of dough volume
+	private static final double EXPANSION_SCALE = 4.5;
+	// Neutral gluten strength/development factor used to build the proofing target of a product (see
+	// calculateReferenceGasPotential)
+	private static final double REFERENCE_CAPACITY_FACTOR = 0.6;
+	// Floor of the kneading contribution to the gas capacity: even a hand-kneaded dough builds a network
+	// (folds and rest complete it), while a mixer saturates it at 1
+	private static final double KNEADING_FACTOR_FLOOR = 0.6;
 
 	/**
 	 * Finds the optimal initial yeast ratio using a Brent Optimizer.
@@ -47,8 +91,11 @@ public class YeastOptimizer{
 			targetProduct);
 
 		// The objective function defines the target for the optimizer to minimize
-		final UnivariateFunction objective = yeastAttempt -> {
+		// The search runs on the natural logarithm of the yeast ratio: the range spans more than two decades, and a
+		// linear search would barely sample the lowest doses used in long cold fermentations
+		final UnivariateFunction objective = logYeastAttempt -> {
 			// Run the ODE simulation using the current yeast attempt value
+			final double yeastAttempt = Math.exp(logYeastAttempt);
 			final double[] y = runSimulation(runtimeInputs, gab, baseMaxGasPotential, yeastAttempt, preConditioner);
 			// If the simulation crashed or hit a mathematical wall, return a maximum penalty score
 			if(y == null)
@@ -57,14 +104,13 @@ public class YeastOptimizer{
 			return evaluateFitness(runtimeInputs, gab, baseMaxGasPotential, y, targetProduct);
 		};
 
-		final BrentOptimizer optimizer = new BrentOptimizer(1.e-6, 1.e-6);
-		return optimizer.optimize(
+		final BrentOptimizer optimizer = new BrentOptimizer(1.e-4, 1.e-4);
+		return Math.exp(optimizer.optimize(
 			new MaxEval(200),
 			new UnivariateObjectiveFunction(objective),
 			GoalType.MINIMIZE,
-			// Scans from 0.05% up to 3.5% fresh yeast fractions
-			new SearchInterval(0.0005, 0.035)
-		).getPoint();
+			new SearchInterval(Math.log(MIN_YEAST_RATIO), Math.log(MAX_YEAST_RATIO))
+		).getPoint());
 	}
 
 	/**
@@ -96,7 +142,7 @@ public class YeastOptimizer{
 		final double foldedMaxGasPotential = baseMaxGasPotential
 			* Math.pow(FoldEventHandler.STRUCTURAL_GAIN, appliedFolds);
 
-		final double[] yDotFinal = new double[4];
+		final double[] yDotFinal = new double[7];
 		// Final gas production speed. The structural gain is already inside foldedMaxGasPotential,
 		// so an empty fold handler is used: it contributes a modifier of exactly 1.0 and does not
 		// apply any further folds on top of the pre-multiplied ceiling.
@@ -110,11 +156,53 @@ public class YeastOptimizer{
 		final double dynamicMaxPotential = foldedMaxGasPotential
 			* DoughOdeSystem.skinningModifier(lastStageRH);
 
-		// Delegate the product-specific cost to the BakeryProduct enum. The oil ratio, the number
-		// of applied folds and the degassing retention are all passed through so the enum can apply
-		// its Gaussian oil and fold rewards and slide the underproof threshold by the fold count.
-		return targetProduct.computeFitness(y[2], dynamicMaxPotential, y[1], y[0], yDotFinal[2],
-			in.recipe().oilRatio(), appliedFolds, FoldEventHandler.DEGASSING_RETENTION);
+		// Delegate the product-specific cost to the BakeryProduct enum. The degassing of the folds is already in the
+		// simulated gas volume, so the proofing target is not lowered by the number of folds.
+		final double fermentationFitness = targetProduct.computeFitness(y[2], dynamicMaxPotential,
+			calculateReferenceGasPotential(in, targetProduct), y[1], y[0], yDotFinal[2]);
+
+		// Hydration, salt, malt and oil cannot be judged by the fermentation alone: add their formulation cost
+		final DoughRecipe recipe = in.recipe();
+		// The number of folds is not rewarded for itself: it is judged through the gluten development it brings
+		final double developmentIndex = calculateDevelopmentIndex(in, totalMinutes);
+		return fermentationFitness
+			+ targetProduct.computeFormulationCost(recipe.waterRatio(), recipe.saltRatio(), recipe.maltRatio(),
+				recipe.oilRatio())
+			+ targetProduct.computeStructuralCost(recipe.waterRatio(), developmentIndex, appliedFolds);
+	}
+
+	/**
+	 * Gluten development reached at the end of the timeline, in [0, 1].
+	 * <p>
+	 * Kneading sets the starting value, depending on the mixer and on the kneading time. Every stretch-and-fold set
+	 * applied within the timeline then closes a fraction of the remaining gap; a fold given too soon after the
+	 * previous one (or after the mixing) finds a dough that has not relaxed and is less effective.
+	 * </p>
+	 */
+	public static double calculateDevelopmentIndex(final SimulationInputs in, final double totalMinutes){
+		final KneadingInput kneading = in.kneading();
+		final double mixerDevelopment = Math.min(1., kneading.type().getDevelopmentEfficiency());
+		final double kneadingDevelopment = Math.min(MAX_KNEADING_DEVELOPMENT, MAX_KNEADING_DEVELOPMENT * mixerDevelopment
+			* (1. - Math.exp(-kneading.durationMinutes() / KNEADING_TIME_CONSTANT)));
+		// Autolyse: the flour hydrates and the gluten develops with no work, closing part of the remaining gap
+		final double initialDevelopment = 1. - (1. - kneadingDevelopment)
+			* Math.exp(-kneading.autolyseMinutes() / AUTOLYSE_TIME_CONSTANT);
+
+		final double[] folds = in.folds().clone();
+		Arrays.sort(folds);
+		double gap = 1. - initialDevelopment;
+		double previousMinute = 0.;
+		for(final double fold : folds){
+			if(fold >= totalMinutes)
+				break;
+
+			final double relaxation = Math.min(1., Math.max(MIN_FOLD_EFFECTIVENESS, (fold - previousMinute) / FOLD_REST_MINUTES));
+			// A fold given close to the end leaves no time to rest and recover the gas before the shaping: it counts less
+			final double lateness = Math.min(1., Math.max(0., (totalMinutes - fold) / FINAL_REST_MINUTES));
+			gap *= 1. - FOLD_DEVELOPMENT_GAIN * relaxation * lateness;
+			previousMinute = fold;
+		}
+		return 1. - gap;
 	}
 
 	/**
@@ -192,23 +280,40 @@ public class YeastOptimizer{
 			}
 		}
 
-		// Set initial conditions for state variables: [Biomass X, Sugars S, Gas Volume V, Ethanol EtOH]
+		// Set initial conditions for state variables: [Biomass X, Sugars S, Gas Volume V, Ethanol EtOH, Damaged starch D, Physiological state h]
 		final double initialX = yeastRatio * (1. - yeastMoisture) * rehydrationEfficiencyModifier;
 
 		double totalFlourSugar = 0.;
 		for(int i = 0; i < in.flourMatrix().length; i ++)
 			totalFlourSugar += in.fractions()[i] * in.flourMatrix()[i].sugar();
-		final double initialS = totalFlourSugar + (in.recipe().maltRatio() * in.recipe().maltSugarContent());
+		double initialS = totalFlourSugar + (in.recipe().maltRatio() * in.recipe().maltSugarContent());
 		final double initialV = 0.;
 		final double initialEtOH = 0.;
 		// Build the direct dough baseline state array vector
-		final double[] y = new double[]{initialX, initialS, initialV, initialEtOH};
+		double initialDamagedStarch = damagedStarchOf(in);
+
+		// Autolyse: the amylases work on the damaged starch while flour and water rest together (at the temperature of
+		// the flour), before the yeast is added
+		final double autolyseHydrolysis = initialDamagedStarch * DoughOdeSystem.starchHydrolysisFraction(
+			in.kneading().autolyseMinutes(), in.flourTemperature(), in.recipe().waterRatio() + gab.flourActiveWater);
+		initialDamagedStarch -= autolyseHydrolysis;
+		initialS += DoughOdeSystem.STARCH_TO_MALTOSE_YIELD * autolyseHydrolysis;
+
+		// Lag phase: the yeast of a pre-ferment is already adapted, the one added directly to the dough is not
+		final double initialPhysiologicalState = (preConditioner != null?
+			DoughOdeSystem.ADAPTED_PHYSIOLOGICAL_STATE: DoughOdeSystem.initialPhysiologicalState(yeastMoisture));
+		final double[] y = new double[]{initialX, initialS, initialV, initialEtOH, initialDamagedStarch,
+			initialPhysiologicalState, 0.};
 
 		// --- INTERCEPTOR TRIGGER FIX ---
 		// If an active plugin preconditioner hook is provided, let it execute now!
 		// It intercepts y and modifies biomass, sugars, and ethanol based on Phase 1 outcomes.
-		if(preConditioner != null)
+		if(preConditioner != null){
 			preConditioner.applyToInitialState(y, totalFlourSugar);
+			// The growth of the yeast in the pre-ferment already used part of its doublings
+			if(initialX > 0.)
+				y[6] = Math.max(0., Math.log(y[0] / initialX) / Math.log(2.));
+		}
 
 		double currentTime = 0.;
 		// Create the event handler to intercept stretch and fold timestamps
@@ -217,7 +322,7 @@ public class YeastOptimizer{
 			final DoughOdeSystem ode = new DoughOdeSystem(stage.temperature(), stage.relativeHumidity(),
 				gab, baseMaxGasPotential, in, foldHandler);
 			// Variable-step size integrator setup
-			final DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.e-4, 0.1,
+			final DormandPrince853Integrator integrator = new DormandPrince853Integrator(1.e-4, 2.,
 				1.e-5, 1.e-5);
 			integrator.addEventHandler(foldHandler, 0.01, 1.e-4, 100);
 
@@ -236,9 +341,51 @@ public class YeastOptimizer{
 		return y;
 	}
 
+	/**
+	 * Damaged starch of the flour blend, weighted by the flour fractions [g/g_flour].
+	 */
+	private static double damagedStarchOf(final SimulationInputs in){
+		double damagedStarch = 0.;
+		for(int i = 0; i < in.flourMatrix().length; i ++)
+			damagedStarch += in.fractions()[i] * in.flourMatrix()[i].estimatedDamagedStarch();
+		return damagedStarch;
+	}
+
+	/**
+	 * Volume of the dough before any fermentation [ml/g_flour].
+	 */
+	private static double doughVolume(final SimulationInputs in){
+		final DoughRecipe recipe = in.recipe();
+		// The moisture of the flour (which depends on the air humidity) is split as in the GAB model: the bound water
+		// and the free water have different densities, and the rest of the gram of flour is dry solids
+		final GabMoistureModel.GabResult gab = GabMoistureModel.calculateMoisture(in);
+		final double drySolids = 1. - gab.flourStrictlyBoundWater - gab.flourActiveWater;
+		// Malt is a flour-like powder; masses are per gram of flour, so the volume is the sum of the component volumes
+		return (drySolids + recipe.maltRatio()) / DRY_SOLIDS_DENSITY
+			+ gab.flourStrictlyBoundWater / BOUND_WATER_DENSITY
+			+ (gab.flourActiveWater + recipe.waterRatio()) / WATER_DENSITY
+			+ recipe.saltRatio() / SALT_DENSITY + recipe.oilRatio() / OIL_DENSITY;
+	}
+
+	/**
+	 * Reference gas capacity [ml/g_flour] from which the proofing target of a product (underproof threshold) is derived.
+	 * <p>
+	 * It deliberately ignores flour strength, mixer, ash, lipids and ambient humidity: the volume a product must reach
+	 * is a property of the product and of the dough volume, so a stronger flour or a better mixer must not make the
+	 * target harder to reach.
+	 * </p>
+	 */
+	public static double calculateReferenceGasPotential(final SimulationInputs in, final BakeryProduct targetProduct){
+		return doughVolume(in) * targetProduct.getGlutenTearingLimit() * EXPANSION_SCALE * REFERENCE_CAPACITY_FACTOR;
+	}
+
+	/**
+	 * Gas the gluten network can hold before it tears [ml/g_flour]: it drives the overproof (gas leakage) side of the
+	 * fitness and the retention efficiency inside the ODE. It grows with the flour strength and the network
+	 * development, so a stronger flour or a mixer widens the safe window without moving the proofing target.
+	 */
 	public static double calculateMaxGasPotential(final double[] summary, final SimulationInputs in,
 			final BakeryProduct targetProduct){
-		// ACTIVATE FlourInput.getPlRatio, getFat, getAsh and DoughRecipe.getOilRatio
 		final double blendW = summary[0];
 		final double blendPL = summary[1];
 		final double blendFat = summary[2];
@@ -255,10 +402,16 @@ public class YeastOptimizer{
 		final double totalLipids = oilRatio + blendFat;
 		final double lipidModifier = 1. + (totalLipids <= 0.08? totalLipids * 1.5: 0.12 - (totalLipids - 0.08) * 2.);
 
-		final double kneadingEfficiency = in.kneading().type().getDevelopmentEfficiency();
+		// 4. Gluten network strength saturates with W: a stronger flour holds more gas, with diminishing returns
+		final double strengthFactor = blendW / (blendW + W_HALF_SATURATION);
 
-		return blendW * targetProduct.getGlutenTearingLimit() * 0.05 * kneadingEfficiency * plModifier
-			* ashModifier * lipidModifier;
+		// 5. Network development reached by kneading alone (folds add to it during the simulation), saturating at 1
+		final double kneadingEfficiency = in.kneading().type().getDevelopmentEfficiency();
+		final double developmentFactor = KNEADING_FACTOR_FLOOR
+			+ (1. - KNEADING_FACTOR_FLOOR) * Math.min(1., kneadingEfficiency);
+
+		return doughVolume(in) * targetProduct.getGlutenTearingLimit() * EXPANSION_SCALE * strengthFactor
+			* developmentFactor * plModifier * ashModifier * lipidModifier;
 	}
 
 	public static double[] inputsSummary(final SimulationInputs in){

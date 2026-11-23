@@ -10,11 +10,9 @@ package io.github.mtrevisan.yeastcalculator.domain;
  * preserved (sugar threshold), and the maximum sensory threshold for residual biological biomass.
  * </p>
  * <p>
- * NEW: fold and oil rewards are now Gaussian functions centered on a product-specific optimum.
- * The previous linear reward was monotonically increasing, which drove the optimizer to always
- * select the maximum number of folds and the maximum amount of oil regardless of culinary
- * reality. A Gaussian reward peaks at the optimal value and decreases on both sides, which is
- * the correct shape for a "diminishing returns" contribution.
+ * The number of stretch-and-fold
+ * sets has no reward of its own: it emerges from the gluten development the product requires (see
+ * {@link #computeStructuralCost(double, double, int)}).
  * </p>
  */
 public enum BakeryProduct{
@@ -26,16 +24,16 @@ public enum BakeryProduct{
 	 * Requires strict retention of residual sugars to prevent flash charring in high-temperature ovens (450 °C+).
 	 * Strict yeast cell density caps to ensure a clean flavor profile in thin crusts.
 	 */
-	NEAPOLITAN_PIZZA(1.7, 0.003, 0.001, 25., 30., 4.0, 1.5, 0.35, 15., 1, 0.01){
+	NEAPOLITAN_PIZZA(1.7, 0.003, 0.001, 25., 30., 0.35, 15., 0.60,
+		new RecipeEnvelope(0.58, 0.65, 0.025, 0.030, 0., 0.005, 0., 0.02)){
 		@Override
-		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
-				final double finalYeast, final double finalYeastDot, final double oilRatio, final int appliedFolds,
-				final double foldDegassingRetention){
+		public double computeFitness(final double finalVolume, final double maxPotential, final double referencePotential,
+				final double residualSugar,
+				final double finalYeast, final double finalYeastDot){
 			final double kTear = 1.5;
 			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
 
-			final double foldDegassingScale = Math.pow(foldDegassingRetention, appliedFolds);
-			final double effectiveUnderproofThreshold = maxPotential * getUnderproofThresholdFactor() * foldDegassingScale;
+			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
 
 			double rheologicalPenalty = 0.;
 			if(retentionEfficiency < 0.92)
@@ -63,16 +61,7 @@ public enum BakeryProduct{
 			// Kinetic check: Gas production rate should be stable and entering plateau
 			final double kineticPenalty = Math.abs(finalYeastDot) * 8.;
 
-			// Gaussian reward: peaks at the product-specific optimal fold count.
-			final double deviation = appliedFolds - getOptimalFoldCount();
-			final double sigma = (deviation < 0? 0.8 : 1.5);
-			final double foldReward = -getFoldRewardMultiplier() * Math.exp(-deviation * deviation / (2. * sigma * sigma));
-
-			// Gaussian reward: peaks at the product-specific optimal oil fraction.
-			final double oilDeviation = (oilRatio - getOptimalOilRatio()) / OIL_REWARD_SIGMA;
-			final double oilReward = -getOilRewardMultiplier() * Math.exp(-oilDeviation * oilDeviation / 2.);
-
-			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty + oilReward + foldReward;
+			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
 		}
 
 		@Override
@@ -91,16 +80,16 @@ public enum BakeryProduct{
 	 * Requires maximizing volume while maintaining a stable gluten mesh to support heavy aeration.
 	 * Moderate yeast limit to tolerate intensive expansion without crumbling or structural collapse.
 	 */
-	ROMAN_PAN_PIZZA(2.2, 0.004, 0.002, 15., 45., 10.0, 2.5, 0.50, 15., 4, 0.025){
+	ROMAN_PAN_PIZZA(2.2, 0.004, 0.002, 15., 45., 0.50, 15., 0.85,
+		new RecipeEnvelope(0.70, 0.85, 0.018, 0.024, 0., 0.010, 0.015, 0.04)){
 		@Override
-		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
-				final double finalYeast, final double finalYeastDot, final double oilRatio, final int appliedFolds,
-				final double foldDegassingRetention){
+		public double computeFitness(final double finalVolume, final double maxPotential, final double referencePotential,
+				final double residualSugar,
+				final double finalYeast, final double finalYeastDot){
 			final double kTear = 1.5;
 			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
 
-			final double foldDegassingScale = Math.pow(foldDegassingRetention, appliedFolds);
-			final double effectiveUnderproofThreshold = maxPotential * getUnderproofThresholdFactor() * foldDegassingScale;
+			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
 
 			double rheologicalPenalty = 0.;
 			if(retentionEfficiency < 0.82)
@@ -124,13 +113,7 @@ public enum BakeryProduct{
 
 			final double kineticPenalty = Math.abs(finalYeastDot) * 5.;
 
-			final double foldDeviation = appliedFolds - getOptimalFoldCount();
-			final double foldReward = -getFoldRewardMultiplier() * Math.exp(-foldDeviation * foldDeviation / 2.);
-
-			final double oilDeviation = (oilRatio - getOptimalOilRatio()) / OIL_REWARD_SIGMA;
-			final double oilReward = -getOilRewardMultiplier() * Math.exp(-oilDeviation * oilDeviation / 2.);
-
-			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty + oilReward + foldReward;
+			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
 		}
 
 		@Override
@@ -160,16 +143,16 @@ public enum BakeryProduct{
 	 * High sugar buffer target to sustain long baking charts at 220 °C.
 	 * Higher yeast threshold tolerated due to the protective emulsifying effects of added oils/fats.
 	 */
-	GASTRONOMY_PAN_PIZZA(2., 0.004, 0.003, 20., 50., 12.0, 8.0, 0.35, 8., 3, 0.030){
+	GASTRONOMY_PAN_PIZZA(2., 0.004, 0.003, 20., 50., 0.35, 8., 0.80,
+		new RecipeEnvelope(0.60, 0.75, 0.018, 0.024, 0., 0.010, 0.02, 0.05)){
 		@Override
-		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
-				final double finalYeast, final double finalYeastDot, final double oilRatio, final int appliedFolds,
-				final double foldDegassingRetention){
+		public double computeFitness(final double finalVolume, final double maxPotential, final double referencePotential,
+				final double residualSugar,
+				final double finalYeast, final double finalYeastDot){
 			final double kTear = 1.5;
 			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
 
-			final double foldDegassingScale = Math.pow(foldDegassingRetention, appliedFolds);
-			final double effectiveUnderproofThreshold = maxPotential * getUnderproofThresholdFactor() * foldDegassingScale;
+			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
 
 			double rheologicalPenalty = 0.;
 			if(retentionEfficiency < 0.85)
@@ -191,17 +174,7 @@ public enum BakeryProduct{
 			// Stability: Ensure the gas velocity curve has completely flattened out (plateau phase)
 			final double kineticPenalty = Math.abs(finalYeastDot) * 6.;
 
-			// Gaussian reward: peaks at 3 fold sets (Hamelman, Bread, 2nd ed.; Reinhart,
-			// The Bread Baker's Apprentice). Both fewer and more folds reduce the reward.
-			final double foldDeviation = appliedFolds - getOptimalFoldCount();
-			final double foldReward = -getFoldRewardMultiplier() * Math.exp(-foldDeviation * foldDeviation / 2.);
-
-			// Gaussian reward: peaks at 3% oil by flour mass, the typical upper target for a
-			// gastronomy pan pizza where fat contributes tenderness and crust browning.
-			final double oilDeviation = (oilRatio - getOptimalOilRatio()) / OIL_REWARD_SIGMA;
-			final double oilReward = -getOilRewardMultiplier() * Math.exp(-oilDeviation * oilDeviation / 2.);
-
-			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty + oilReward + foldReward;
+			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
 		}
 
 		@Override
@@ -231,16 +204,16 @@ public enum BakeryProduct{
 	 * Must maintain high elastic retention reserves to handle oven-spring expansions and scoring expansions.
 	 * Strict kinetic constraints to prevent pocket channeling and uneven baking tunnels.
 	 */
-	BREAD(1.9, 0.004, 0.0015, 20., 40., 8.0, 3.0, 0.40, 15., 3, 0.015){
+	BREAD(1.9, 0.004, 0.004, 20., 40., 0.40, 15., 0.90,
+		new RecipeEnvelope(0.62, 0.78, 0.018, 0.022, 0., 0.010, 0., 0.03)){
 		@Override
-		public double computeFitness(final double finalVolume, final double maxPotential, final double residualSugar,
-				final double finalYeast, final double finalYeastDot, final double oilRatio, final int appliedFolds,
-				final double foldDegassingRetention){
+		public double computeFitness(final double finalVolume, final double maxPotential, final double referencePotential,
+				final double residualSugar,
+				final double finalYeast, final double finalYeastDot){
 			final double kTear = 1.5;
 			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
 
-			final double foldDegassingScale = Math.pow(foldDegassingRetention, appliedFolds);
-			final double effectiveUnderproofThreshold = maxPotential * getUnderproofThresholdFactor() * foldDegassingScale;
+			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
 
 			double rheologicalPenalty = 0.;
 			if(retentionEfficiency < 0.88)
@@ -264,13 +237,7 @@ public enum BakeryProduct{
 			// Dynamic structural stabilization check for freestanding loaves
 			final double stabilityPenalty = Math.abs(finalYeastDot) * 12.;
 
-			final double foldDeviation = appliedFolds - getOptimalFoldCount();
-			final double foldReward = -getFoldRewardMultiplier() * Math.exp(-foldDeviation * foldDeviation / 2.);
-
-			final double oilDeviation = (oilRatio - getOptimalOilRatio()) / OIL_REWARD_SIGMA;
-			final double oilReward = -getOilRewardMultiplier() * Math.exp(-oilDeviation * oilDeviation / 2.);
-
-			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + stabilityPenalty + oilReward + foldReward;
+			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + stabilityPenalty;
 		}
 
 		@Override
@@ -286,9 +253,35 @@ public enum BakeryProduct{
 	};
 
 
-	// Width of the Gaussian oil reward, expressed in oil fraction units. A deviation of one
-	// sigma from the optimum reduces the reward to 60.6% of its peak.
-	private static final double OIL_REWARD_SIGMA = 0.02;
+
+	// Weight of the formulation cost of hydration, salt and malt, and distance outside the envelope at which each
+	// term reaches its weight
+	private static final double HYDRATION_COST = 8.;
+	private static final double HYDRATION_TOLERANCE = 0.04;
+	private static final double SALT_COST = 6.;
+	private static final double SALT_TOLERANCE = 0.003;
+	private static final double MALT_COST = 4.;
+	private static final double MALT_TOLERANCE = 0.004;
+	// Oil has no point optimum: it is free inside the range the style is made with (fat tenderizes the crumb and
+	// lengthens the shelf life, but slows the yeast and, above 8% with the flour lipids, tears the network)
+	private static final double OIL_COST = 5.;
+	private static final double OIL_TOLERANCE = 0.01;
+	// Gluten development: gap from the requirement at which the cost reaches its weight, and the margin above the
+	// requirement before the dough starts to be over-developed
+	private static final double DEVELOPMENT_TOLERANCE = 0.1;
+	private static final double DEVELOPMENT_MARGIN = 0.15;
+	private static final double UNDERDEVELOPMENT_COST = 6.;
+	private static final double OVERDEVELOPMENT_COST = 3.;
+	// Cost of each stretch-and-fold set (work, the gas lost and the dough temperature)
+	private static final double FOLD_LABOR_COST = 0.5;
+	// Change of the required development per unit of hydration above the middle of the product's envelope
+	private static final double HYDRATION_DEVELOPMENT_SLOPE = 1.5;
+	// Weak pull toward the middle of the envelope, as a fraction of the weight (1 = at the envelope edge)
+	private static final double CENTER_PULL = 0.05;
+	// Stronger pull for the hydration: nothing in the fermentation rewards more water (the gluten development required
+	// grows with it), so without it the hydration would always sit on the lowest edge of the envelope, while a baker
+	// hydrates the dough toward the middle of the range the flour and the style allow
+	private static final double HYDRATION_CENTER_PULL = 0.5;
 
 
 	private final double glutenTearingLimit;
@@ -296,30 +289,25 @@ public enum BakeryProduct{
 	private final double maxAllowedFinalYeast;
 	private final double tearingPenaltyMultiplier;
 	private final double starvationPenaltyMultiplier;
-	private final double oilRewardMultiplier;
-	private final double foldRewardMultiplier;
 	private final double underproofThresholdFactor;
 	private final double underproofPenaltyCoefficient;
-	private final int optimalFoldCount;
-	private final double optimalOilRatio;
+	private final double requiredDevelopment;
+	private final RecipeEnvelope recipeEnvelope;
 
 
 	BakeryProduct(final double glutenTearingLimit, final double minSafeSugarThreshold, final double maxAllowedFinalYeast,
 			final double tearingPenaltyMultiplier, final double starvationPenaltyMultiplier,
-			final double oilRewardMultiplier, final double foldRewardMultiplier,
 			final double underproofThresholdFactor, final double underproofPenaltyCoefficient,
-			final int optimalFoldCount, final double optimalOilRatio){
+			final double requiredDevelopment, final RecipeEnvelope recipeEnvelope){
 		this.glutenTearingLimit = glutenTearingLimit;
 		this.minSafeSugarThreshold = minSafeSugarThreshold;
 		this.maxAllowedFinalYeast = maxAllowedFinalYeast;
 		this.tearingPenaltyMultiplier = tearingPenaltyMultiplier;
 		this.starvationPenaltyMultiplier = starvationPenaltyMultiplier;
-		this.oilRewardMultiplier = oilRewardMultiplier;
-		this.foldRewardMultiplier = foldRewardMultiplier;
 		this.underproofThresholdFactor = underproofThresholdFactor;
 		this.underproofPenaltyCoefficient = underproofPenaltyCoefficient;
-		this.optimalFoldCount = optimalFoldCount;
-		this.optimalOilRatio = optimalOilRatio;
+		this.requiredDevelopment = requiredDevelopment;
+		this.recipeEnvelope = recipeEnvelope;
 	}
 
 
@@ -343,13 +331,7 @@ public enum BakeryProduct{
 		return starvationPenaltyMultiplier;
 	}
 
-	public double getOilRewardMultiplier(){
-		return oilRewardMultiplier;
-	}
 
-	public double getFoldRewardMultiplier(){
-		return foldRewardMultiplier;
-	}
 
 	public double getUnderproofThresholdFactor(){
 		return underproofThresholdFactor;
@@ -359,30 +341,106 @@ public enum BakeryProduct{
 		return underproofPenaltyCoefficient;
 	}
 
-	public int getOptimalFoldCount(){
-		return optimalFoldCount;
+
+	public double getRequiredDevelopment(){
+		return requiredDevelopment;
 	}
 
-	public double getOptimalOilRatio(){
-		return optimalOilRatio;
+	/**
+	 * Gluten development this product requires for a given hydration, in [0, 1].
+	 * <p>
+	 * The product value refers to the middle of its hydration envelope; a wetter dough has less intrinsic structure
+	 * and needs more development to hold its shape, a drier one less.
+	 * </p>
+	 */
+	public double requiredDevelopment(final double hydration){
+		final double hydrationMid = (recipeEnvelope.hydrationMin() + recipeEnvelope.hydrationMax()) / 2.;
+		return Math.min(0.95, Math.max(0.3, requiredDevelopment + HYDRATION_DEVELOPMENT_SLOPE * (hydration - hydrationMid)));
 	}
+
+	/**
+	 * Structural cost of the gluten development reached by the mixer and the stretch &amp; folds.
+	 * <p>
+	 * It replaces any fixed "best number of folds": that number emerges from the development the product requires
+	 * and the development already reached by kneading. An under-developed dough is slack and holds the gas poorly
+	 * (quadratic cost below the requirement), an over-developed one is tight and tears when stretched (milder cost
+	 * above the requirement plus a margin), and every fold costs a little (work, and the gas it degasses).
+	 * </p>
+	 *
+	 * @param hydration	Water ratio (g/g_flour).
+	 * @param developmentIndex	Gluten development reached at the end of the timeline, in [0, 1].
+	 * @param appliedFolds	Number of stretch-and-fold sets applied within the timeline.
+	 * @return	Non-negative cost, to be added to the fitness (lower is better).
+	 */
+	public double computeStructuralCost(final double hydration, final double developmentIndex, final int appliedFolds){
+		final double required = requiredDevelopment(hydration);
+		final double shortfall = Math.max(0., required - developmentIndex) / DEVELOPMENT_TOLERANCE;
+		final double excess = Math.max(0., developmentIndex - required - DEVELOPMENT_MARGIN) / DEVELOPMENT_TOLERANCE;
+		return UNDERDEVELOPMENT_COST * shortfall * shortfall + OVERDEVELOPMENT_COST * excess * excess
+			+ FOLD_LABOR_COST * appliedFolds;
+	}
+
+	public RecipeEnvelope getRecipeEnvelope(){
+		return recipeEnvelope;
+	}
+
+	/**
+	 * Formulation cost of the hydration, salt, malt and oil of a recipe against the envelope of this product.
+	 * <p>
+	 * Fermentation alone cannot judge these three: more water speeds up the yeast, less salt too, more malt feeds
+	 * it, so without a counterweight the optimizer would push them to the search bounds. Each term is a dead-zone
+	 * quadratic: free inside the envelope the style is made with, growing with the squared distance from it
+	 * (normalized by a tolerance) outside, plus a weak pull toward the center of the envelope that keeps the optimum
+	 * unique.
+	 * </p>
+	 *
+	 * @param hydration	Water ratio (g/g_flour).
+	 * @param salt	Salt ratio (g/g_flour).
+	 * @param malt	Diastatic malt ratio (g/g_flour).
+	 * @param oil	Added oil ratio (g/g_flour).
+	 * @return	Non-negative cost, to be added to the fitness (lower is better).
+	 */
+	public double computeFormulationCost(final double hydration, final double salt, final double malt,
+			final double oil){
+		return HYDRATION_COST * envelopeCost(hydration, recipeEnvelope.hydrationMin(), recipeEnvelope.hydrationMax(),
+			HYDRATION_TOLERANCE, HYDRATION_CENTER_PULL)
+			+ SALT_COST * envelopeCost(salt, recipeEnvelope.saltMin(), recipeEnvelope.saltMax(), SALT_TOLERANCE, CENTER_PULL)
+			+ MALT_COST * envelopeCost(malt, recipeEnvelope.maltMin(), recipeEnvelope.maltMax(), MALT_TOLERANCE, CENTER_PULL)
+			+ OIL_COST * envelopeCost(oil, recipeEnvelope.oilMin(), recipeEnvelope.oilMax(), OIL_TOLERANCE, CENTER_PULL);
+	}
+
+	private static double envelopeCost(final double value, final double min, final double max, final double tolerance,
+			final double centerPull){
+		final double outside = (value < min? min - value: (value > max? value - max: 0.));
+		final double center = (min + max) / 2.;
+		final double halfWidth = Math.max((max - min) / 2., tolerance);
+		final double fromCenter = (value - center) / halfWidth;
+		final double outsideScaled = outside / tolerance;
+		return outsideScaled * outsideScaled + centerPull * fromCenter * fromCenter;
+	}
+
+	/**
+	 * Accepted range of hydration, salt, malt and oil (g/g_flour) for a product, from common baker's formulations.
+	 */
+	public record RecipeEnvelope(double hydrationMin, double hydrationMax, double saltMin, double saltMax,
+		double maltMin, double maltMax, double oilMin, double oilMax){}
+
 
 
 	/**
 	 * Computes the custom cost fitness value based on the final dough parameters.
-	 * @param finalVolume	Simulated gas volume at the timeline end (mL/g_flour).
-	 * @param maxPotential	Maximum theoretical expansion potential of the gluten network (mL/g_flour).
+	 * @param finalVolume	Simulated gas volume at the timeline end (ml/g_flour).
+	 * @param maxPotential	Gas the gluten network can hold before tearing (ml/g_flour): drives the overproof side.
+	 * @param referencePotential	Strength-independent reference capacity (ml/g_flour) the proofing target (underproof
+	 * threshold) is derived from.
 	 * @param residualSugar	Leftover fermentable sugar percentage at execution end (g/g_flour).
 	 * @param finalYeast	Instantaneous active yeast cell concentration at the execution end (g/g_flour).
 	 * @param finalYeastDot	Instantaneous final gas derivative (speed of volume growth).
-	 * @param oilRatio	Added oil ratio in the recipe (g/g_flour).
-	 * @param appliedFolds	Number of stretch-and-fold sets actually applied within the timeline.
-	 * @param foldDegassingRetention	Fraction of gas retained through each fold event.
 	 * @return	Fitness score. The closer to negative infinity, the more optimal the recipe is.
 	 */
-	public abstract double computeFitness(double finalVolume, double maxPotential, double residualSugar,
-		double finalYeast, double finalYeastDot, double oilRatio, int appliedFolds,
-		double foldDegassingRetention);
+	public abstract double computeFitness(double finalVolume, double maxPotential, double referencePotential,
+		double residualSugar,
+		double finalYeast, double finalYeastDot);
 
 	/**
 	 * Generates specialized handling text advice mapped to the current process stage context.

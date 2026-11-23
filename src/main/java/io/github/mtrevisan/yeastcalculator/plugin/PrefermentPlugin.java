@@ -25,7 +25,7 @@ public interface PrefermentPlugin{
 
 	interface StatePreConditioner{
 		/**
-		 * Modifies the initial state array vector y = [X, S, V, EtOH]
+		 * Modifies the initial state array vector y = [X, S, V, EtOH, D, h, d]; D (damaged starch), h (physiological state) and d (doublings, derived from the biomass change) are set by the optimizer
 		 * immediately prior to Phase 2 integration.
 		 */
 		void applyToInitialState(double[] initialY, double totalFlourSugarBudget);

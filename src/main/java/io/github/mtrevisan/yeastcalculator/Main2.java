@@ -52,8 +52,10 @@ public class Main2{
 		final double targetYeastMoisture = 0.70;
 		final YeastInput yeastProps = new YeastInput(targetYeastMoisture);
 
-		// 4. Mechanical Kneading profiles
-		final KneadingInput kneading = new KneadingInput(KneadingInput.KneadingType.MANUAL, 15.);
+		// 4. Mechanical Kneading profiles and autolyse (flour and water resting together before adding the yeast and
+		// the salt, 0 for none: it develops the gluten with no work, so fewer folds are needed)
+		final double autolyseMinutes = 30.;
+		final KneadingInput kneading = new KneadingInput(KneadingInput.KneadingType.MANUAL, 15., autolyseMinutes);
 
 		// 5. Multi-stage fermentation schedule (Hard constraints set by user)
 		final StageInput[] stages = {
@@ -77,6 +79,7 @@ public class Main2{
 		System.out.println("Selected Target Product: " + selectedProduct.name());
 		// PRINT CALCULATED TIMELINE INSIGHTS PRIOR TO EXECUTING OPTIMIZATION RAMP
 		System.out.printf("Yeast Type Target Moisture : %.1f%%\n", targetYeastMoisture * 100.);
+		System.out.printf("Autolyse                   : %.0f min\n", autolyseMinutes);
 		final double[] window = yeastProps.getOptimalRehydrationWindow();
 		System.out.printf("Rehydration Recommended    : %.1f min\n", yeastProps.getRehydrationWindow());
 		System.out.printf("Rehydration Optimal Window : %.1f – %.1f min\n", window[0], window[1]);

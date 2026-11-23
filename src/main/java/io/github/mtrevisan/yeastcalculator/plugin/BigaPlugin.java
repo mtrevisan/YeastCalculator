@@ -27,16 +27,14 @@ public class BigaPlugin implements PrefermentPlugin{
 	public PrefermentDecorator interceptAndPreCondition(final SimulationInputs rawInputs){
 		final DoughRecipe originalRecipe = rawInputs.recipe();
 
-		// --- 1. RECIPE WATER RE-BALANCING MASS BALANCE ---
-		// A standard Italian Biga is bound at a rigid 44% hydration relative to its specific flour weight.
-		// Water weight in Biga = totalFlour * flourFractionInBiga * 0.44.
-		final double waterUsedInBiga = flourFractionInBiga * 0.44;
-		double adjustedRefreshWaterRatio = originalRecipe.waterRatio() - waterUsedInBiga;
-		if(adjustedRefreshWaterRatio < 0.35)
-			adjustedRefreshWaterRatio = 0.35;
+		// --- 1. RECIPE WATER ---
+		// A standard Italian Biga is bound at a rigid 44% hydration relative to its specific flour weight, so
+		// flourFractionInBiga * 0.44 of the recipe water goes into the Biga. The dough that ferments after the mixing
+		// contains ALL the water of the recipe (the Biga water is not lost), so the water ratio seen by the simulation
+		// (water activity, hydration) is the total one, not the refresh water.
 
 		final DoughRecipe decoratedRecipe = new DoughRecipe(
-			adjustedRefreshWaterRatio,
+			originalRecipe.waterRatio(),
 			originalRecipe.saltRatio(),
 			originalRecipe.oilRatio(),
 			originalRecipe.maltRatio(),
@@ -82,9 +80,9 @@ public class BigaPlugin implements PrefermentPlugin{
 			// Sugars S
 			initialY[1] = Math.max(0.002, initialY[1] - actualConsumedSugar);
 
-			final double preGeneratedEthanol = actualConsumedSugar * 0.46;
+			final double preGeneratedEthanol = actualConsumedSugar * 0.48;
 			// Ethanol EtOH
-			initialY[3] = preGeneratedEthanol * flourFractionInBiga;
+			initialY[3] = preGeneratedEthanol;
 		};
 
 		return new PrefermentDecorator(decoratedInputs, preConditioner);

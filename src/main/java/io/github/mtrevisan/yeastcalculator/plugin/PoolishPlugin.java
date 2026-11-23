@@ -28,25 +28,21 @@ public class PoolishPlugin implements PrefermentPlugin{
 	public PrefermentDecorator interceptAndPreCondition(final SimulationInputs rawInputs){
 		final DoughRecipe originalRecipe = rawInputs.recipe();
 
-		// --- 1. RECIPE WATER RE-BALANCING MASS BALANCE ---
-		// A traditional Poolish uses equal weights of flour and water (100% hydration relative to itself).
-		// Water weight in Poolish = totalFlour * flourFractionInPoolish * 1.0.
-		// Therefore, the water ratio subtracted from the main recipe pool is exactly equal to the flourFraction.
-		final double waterUsedInPoolish = flourFractionInPoolish;
-		double adjustedRefreshWaterRatio = originalRecipe.waterRatio() - waterUsedInPoolish;
-		// Fallback protection to avoid unworkable negative hydration values if user configurations conflict
-		if(adjustedRefreshWaterRatio < 0.35)
-			adjustedRefreshWaterRatio = 0.35;
+		// --- 1. RECIPE WATER ---
+		// A traditional Poolish uses equal weights of flour and water (100% hydration relative to itself), so
+		// flourFractionInPoolish of the recipe water goes into the Poolish. The dough that ferments after the mixing
+		// contains ALL the water of the recipe (the Poolish water is not lost), so the water ratio seen by the
+		// simulation (water activity, hydration) is the total one, not the refresh water.
 
 		final DoughRecipe decoratedRecipe = new DoughRecipe(
-			adjustedRefreshWaterRatio,
+			originalRecipe.waterRatio(),
 			originalRecipe.saltRatio(),
 			originalRecipe.oilRatio(),
 			originalRecipe.maltRatio(),
 			originalRecipe.maltSugarContent(),
 			originalRecipe.maltPollakUnit(),
 			// High water poolish lubricates initial mix, reducing friction heat
-			originalRecipe.mixerFrictionFactor() - 0.5
+			Math.max(0., originalRecipe.mixerFrictionFactor() - 0.5)
 		);
 
 		final SimulationInputs decoratedInputs = new SimulationInputs(
@@ -96,8 +92,8 @@ public class PoolishPlugin implements PrefermentPlugin{
 
 			// Pre-generated ethanol injection accumulation (Gay-Lussac conversion yield ~48%) [Index 3 = Ethanol]
 			final double preGeneratedEthanol = actualConsumedSugar * 0.48;
-			// Diluted across total final dough mass
-			initialY[3] = preGeneratedEthanol * flourFractionInPoolish;
+			// Already per gram of total flour (the sugar budget is per total flour), so it needs no further dilution
+			initialY[3] = preGeneratedEthanol;
 		};
 
 		return new PrefermentDecorator(decoratedInputs, preConditioner);

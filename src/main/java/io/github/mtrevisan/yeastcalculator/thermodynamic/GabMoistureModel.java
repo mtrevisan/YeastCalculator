@@ -54,7 +54,9 @@ public class GabMoistureModel{
 			final double tmp = type.getkGab() * aw;
 			final double uEquilibriumDB = (wmDB[i] * type.getcGab() * tmp)
 				/ ((1. - tmp) * (1. + (type.getcGab() - 1.) * tmp));
-			uTotalDB[i] = clamp(uEquilibriumDB * temperatureCoeff, 0.08, 0.2);
+			// The total moisture can never be below the monolayer: protein- and fiber-rich flours (soy, pulses) have a
+			// monolayer above the usual clamp bounds, which would otherwise give a negative active water
+			uTotalDB[i] = clamp(uEquilibriumDB * temperatureCoeff, Math.max(0.03, wmDB[i]), Math.max(0.2, wmDB[i]));
 			flourMoistureWB[i] = uTotalDB[i] / (1. + uTotalDB[i]);
 			dryMassComponent[i] = fractions[i] * (1. - flourMoistureWB[i]);
 			totalDryMassComponent += dryMassComponent[i];

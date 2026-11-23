@@ -37,7 +37,7 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	// S. cerevisiae under anaerobic conditions, Verduyn et al., 1991, Antonie van Leeuwenhoek 60: 59-64)
 	// to per-minute units: 0.03/60 = 0.0005.
 	private static final double MAINTENANCE_M = 0.0005;
-	// Calibrated gas yield factor per gram of metabolized sugar substrate [mL/g_sugar]
+	// Calibrated gas yield factor per gram of metabolized sugar substrate [ml/g_sugar]
 	private static final double Y_VS = 265.;
 	// Base maximum specific growth rate adjusted from hourly limits to continuous minute scaling [min^-1]
 	private static final double BASE_MU_OPT = 0.0085;
@@ -62,6 +62,41 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	// used to build a Michaelis-like decay modifier in place of the previous hard cutoff, so
 	// the enzyme keeps producing sugar (at a reduced rate) even when free sugars are abundant.
 	private static final double MALT_PRODUCT_INHIBITION_KI = 0.005;
+
+	// --- Growth brake ---
+	// A dough is practically anaerobic from the first minutes: the oxygen entrained by mixing supports a negligible
+	// amount of aerobic growth. Without oxygen the cells cannot synthesize sterols and unsaturated fatty acids, so the
+	// reserves they were pitched with are diluted at every division and the growth fades out after a few doublings.
+	// Number of doublings at which the growth stops (assumed value, of the order of the 3-5 generations a yeast can
+	// do anaerobically from its own reserves)
+	private static final double MAX_DOUBLINGS = 3.;
+	// Sharpness of the brake: the closer to the limit, the stronger it acts, and almost nothing happens in the first
+	// doublings (assumed shape)
+	private static final double GROWTH_BRAKE_EXPONENT = 3.;
+
+	// --- Lag phase ---
+	// Work to be done before the exponential growth starts, h0 = mu * lag (dimensionless)
+	private static final double LAG_WORK_FRESH_YEAST = 0.25;
+	private static final double LAG_WORK_DRY_YEAST = 0.5;
+	// Physiological state of cells that are already fully adapted (e.g. the yeast coming from a pre-ferment)
+	public static final double ADAPTED_PHYSIOLOGICAL_STATE = 5.;
+
+	// --- Sugar supply from the flour's own starch ---
+	// The amylases of the flour (mostly beta-amylase) hydrolyze the damaged starch granules into maltose during the
+	// whole fermentation. Without this source the dough would run out of sugar after a few hours, which is not what
+	// happens in long cold fermentations.
+	// First-order rate constant of the damaged starch hydrolysis at the reference temperature [min^-1].
+	// Calibrated assumption (not a measured constant): about 30% of the damaged starch is hydrolyzed in 5 h at 28 °C,
+	// that is maltose rising by roughly 1% of the flour mass, the order of magnitude seen in fermenting doughs.
+	private static final double STARCH_HYDROLYSIS_RATE = 1.2e-3;
+	// Reference temperature of the hydrolysis rate [°C]
+	private static final double STARCH_REFERENCE_TEMPERATURE = 28.;
+	// Rate multiplier for every 10 °C (enzymatic activity, valid far below the amylase optimum at 50-55 °C)
+	private static final double STARCH_Q10 = 2.;
+	// Water content (added water + free flour water, per g of flour) at which the rate constant was calibrated
+	private static final double STARCH_REFERENCE_SOLVENT = 0.67;
+	// Hydrolysis adds a water molecule: grams of maltose per gram of starch (342.3 / 324.3)
+	public static final double STARCH_TO_MALTOSE_YIELD = 1.055;
 
 	private final double currentTemperature;
 	private final double currentStageRH;
@@ -89,7 +124,9 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 
 	@Override
 	public int getDimension(){
-		return 4;
+		// State vector: [biomass X, sugars S, gas volume V, ethanol EtOH, damaged starch D, physiological state h,
+		// doublings d]
+		return 7;
 	}
 
 	@Override
@@ -98,6 +135,12 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		final double s = Math.max(0., y[1]);
 		final double vGas = Math.max(0., y[2]);
 		final double EtOH = Math.max(0., y[3]);
+		// Damaged starch still available to the amylases [g/g_flour]
+		final double damagedStarch = Math.max(0., y[4]);
+		// Physiological state of the yeast, ln(q) of the Baranyi model (dimensionless)
+		final double physiologicalState = y[5];
+		// Number of doublings of the yeast population accumulated so far (growth brake)
+		final double doublings = Math.max(0., y[6]);
 
 		// --- 1. ROSS MODEL (1975) FOR WATER ACTIVITY (aw) ---
 		final double waterRatio = in.recipe().waterRatio();
@@ -146,8 +189,19 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		final double oilRatio = in.recipe().oilRatio();
 		final double gammaOilInhibition = 1. / (1. + 2.5 * oilRatio);
 
+		// Growth rate without substrate, ethanol and lag limitations: it also drives the adaptation of the cells
+		final double muPotential = adjustedMuOpt * gammaT * gammaAw * gammaOilInhibition;
+
+		// Lag phase (Baranyi & Roberts, 1994): the fraction of the cells' growth capacity available is
+		// alpha = q / (1 + q) = 1 / (1 + exp(-h)), where h = ln(q) is the physiological state. It grows at the same
+		// potential growth rate, so the lag lasts ln(1 + 1/q0) / mu: short when it is warm, hours when it is cold
+		final double adaptation = 1. / (1. + Math.exp(-physiologicalState));
+
 		// Combined growth kinetic rate
-		final double muEff = adjustedMuOpt * (s / (K_S + s)) * gammaT * gammaAw * gammaEthanol * gammaOilInhibition;
+		// Growth brake: the population can only multiply a limited number of times (see MAX_DOUBLINGS)
+		final double growthBrake = Math.max(0., 1. - Math.pow(doublings / MAX_DOUBLINGS, GROWTH_BRAKE_EXPONENT));
+
+		final double muEff = muPotential * (s / (K_S + s)) * gammaEthanol * adaptation * growthBrake;
 
 		final double speedYeastConsumption = ((muEff / Y_XS) + MAINTENANCE_M) * x;
 
@@ -166,9 +220,17 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		final double rMalt = MALT_RATE_COEFFICIENT * in.recipe().maltRatio() * in.recipe().maltPollakUnit()
 			* enzymeActivity * sugarSaturationModifier;
 
+		// Damaged starch hydrolysis: first order in the remaining starch, faster when warmer (Q10) and wetter (the
+		// reaction needs water), and zero below the minimum temperature
+		final double starchTemperatureFactor = (currentTemperature > T_MIN?
+			Math.pow(STARCH_Q10, (currentTemperature - STARCH_REFERENCE_TEMPERATURE) / 10.): 0.);
+		final double starchHydrationFactor = Math.min(1.5, Math.max(0.5, solventWater / STARCH_REFERENCE_SOLVENT));
+		final double starchHydrolysis = STARCH_HYDROLYSIS_RATE * starchTemperatureFactor * starchHydrationFactor
+			* damagedStarch;
+
 		// Calculate derivatives
 		double dX_dt = (muEff - kd) * x;
-		double dS_dt = rMalt - speedYeastConsumption;
+		double dS_dt = rMalt + STARCH_TO_MALTOSE_YIELD * starchHydrolysis - speedYeastConsumption;
 		double dEtOH_dt = Y_ETHANOL_S * speedYeastConsumption;
 
 		// Rheological volume evolution with smooth Bloksma leakage boundaries
@@ -190,6 +252,45 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		yDot[1] = dS_dt;
 		yDot[2] = dVgas_dt;
 		yDot[3] = dEtOH_dt;
+		yDot[4] = (damagedStarch > 0.? -starchHydrolysis: 0.);
+		// d ln(q) / dt = mu: the cells adapt at their potential growth rate (zero when it is too cold or too dry)
+		yDot[5] = muPotential;
+		// Doublings accumulate with the (braked) growth rate
+		yDot[6] = muEff / Math.log(2.);
+	}
+
+	/**
+	 * Initial physiological state ln(q0) of the yeast, from the work to be done before the exponential growth starts
+	 * h0 = ln(1 + 1 / q0) (lag = h0 / mu).
+	 * <p>
+	 * Fresh yeast is already hydrated, so it needs less adaptation than dry yeast, whose cells must first re-swell.
+	 * The values give a lag of roughly 1 h at 28 °C and of several hours at 12-18 °C for fresh yeast (assumed values,
+	 * to be refined with measured lag times).
+	 * </p>
+	 */
+	public static double initialPhysiologicalState(final double yeastMoisture){
+		final double work = (yeastMoisture >= 0.65? LAG_WORK_FRESH_YEAST: LAG_WORK_DRY_YEAST);
+		return -Math.log(Math.exp(work) - 1.);
+	}
+
+	/**
+	 * Fraction of the damaged starch hydrolyzed by the flour's amylases in a given time at a constant temperature, with
+	 * the same kinetics used during the fermentation (first order, Q10 on the temperature, scaled by the water
+	 * available). It is used for the autolyse, when the flour and the water rest together before the yeast is added.
+	 *
+	 * @param minutes	Duration [min].
+	 * @param temperature	Temperature of the dough [°C].
+	 * @param solventWater	Water available (added water + free flour water) [g/g_flour].
+	 * @return	Fraction in [0, 1).
+	 */
+	public static double starchHydrolysisFraction(final double minutes, final double temperature,
+			final double solventWater){
+		if(minutes <= 0. || temperature <= T_MIN)
+			return 0.;
+
+		final double temperatureFactor = Math.pow(STARCH_Q10, (temperature - STARCH_REFERENCE_TEMPERATURE) / 10.);
+		final double hydrationFactor = Math.min(1.5, Math.max(0.5, solventWater / STARCH_REFERENCE_SOLVENT));
+		return 1. - Math.exp(-STARCH_HYDROLYSIS_RATE * temperatureFactor * hydrationFactor * minutes);
 	}
 
 	/**
