@@ -22,17 +22,23 @@ public enum FlourType{
 
 	// --- Wheat and its relatives (gluten-forming) ---
 	WHEAT("wheat", 0.062, 11., 0.89),
+	WHOLE_WHEAT("whole wheat", 0.062, 11.5, 0.89),
 	WHEAT_SEMOLINA("wheat semolina", 0.06, 10.5, 0.9),
 	WHEAT_SEMOLINA_FINE("wheat semolina fine", 0.061, 10.8, 0.9),
 	DURUM_WHEAT("durum wheat", 0.063, 12.5, 0.88),
 	DURUM_WHEAT_SEMOLINA("durum wheat semolina", 0.062, 12., 0.89),
 	DURUM_WHEAT_SEMOLINA_FINE("durum wheat semolina fine", 0.062, 12.2, 0.89),
 	KHORASAN("khorasan", 0.063, 12., 0.89),
+	WHOLE_KHORASAN("whole khorasan", 0.063, 12.5, 0.89),
 	SPELT("spelt", 0.063, 11., 0.89),
+	WHOLE_SPELT("whole spelt", 0.063, 11.5, 0.89),
 	EMMER("emmer", 0.065, 11.2, 0.89),
+	WHOLE_EMMER("whole emmer", 0.065, 11.7, 0.89),
 	EINKORN("einkorn", 0.064, 11.5, 0.89),
+	WHOLE_EINKORN("whole einkorn", 0.064, 12., 0.89),
 	TRITICALE("triticale", 0.063, 11., 0.89),
 	RYE("rye", 0.071, 13.5, 0.87),
+	WHOLE_RYE("whole rye", 0.071, 14., 0.87),
 	BARLEY("barley", 0.068, 10.5, 0.88),
 
 	// --- Other cereals (no gluten network) ---
@@ -57,7 +63,13 @@ public enum FlourType{
 	// --- Nuts and fruits (high fat: low moisture uptake) ---
 	CHESTNUT("chestnut", 0.05, 8., 0.92),
 	ALMOND("almond", 0.01, 7., 0.92),
-	COCONUT("coconut", 0.01, 6., 0.92);
+	COCONUT("coconut", 0.01, 6., 0.92),
+	HAZELNUT("hazelnut", 0.01, 7., 0.92),
+
+	// --- Seeds (high fat and protein: low moisture uptake) ---
+	FLAXSEED("flaxseed", 0.005, 8., 0.91),
+	HEMP("hemp", 0.005, 8., 0.91),
+	SESAME("sesame", 0.015, 7., 0.92);
 
 
 	private final String label;

@@ -42,7 +42,8 @@ public class Main2{
 		final double yeastMoisture = 0.70;
 		final YeastInput yeastProps = new YeastInput(yeastMoisture);
 
-		// 4. Kneading and autolyse
+		// 4. Mechanical Kneading profiles and autolyse (flour and water resting together before adding the yeast and
+		// the salt, 0 for none: it develops the gluten with no work, so fewer folds are needed)
 		final double autolyseMinutes = 30.;
 		final KneadingInput kneading = new KneadingInput(KneadingInput.KneadingType.MANUAL, 15., autolyseMinutes);
 

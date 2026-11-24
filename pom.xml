@@ -107,6 +107,13 @@
 				</configuration>
 			</plugin>
 
+			<!-- Surefire (unit tests) -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>${maven-surefire-plugin.version}</version>
+			</plugin>
+
 			<!-- Shade -->
 			<!-- NOTE: shade 3.2.4 does not support java 17 yet! -->
 			<plugin>

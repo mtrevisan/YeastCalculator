@@ -49,8 +49,8 @@ public class Main1{
 		final double airRelativeHumidity = 0.54;
 
 		// 3. Yeast properties
-		final double targetYeastMoisture = 0.70;
-		final YeastInput yeastProps = new YeastInput(targetYeastMoisture);
+		final double yeastMoisture = 0.70;
+		final YeastInput yeastProps = new YeastInput(yeastMoisture);
 
 		// 4. Mechanical Kneading profiles and autolyse (flour and water resting together before adding the yeast and
 		// the salt, 0 for none: it develops the gluten with no work, so fewer folds are needed)
@@ -71,14 +71,15 @@ public class Main1{
 		final DoughRecipe dummyBaseRecipe = new DoughRecipe(0.62, 0.022, 0.02, 0.002,
 			maltSugarContent, (15_000. / 110.) * (1. - maltSugarContent), 0.05);
 
-		final SimulationInputs initialInputs = new SimulationInputs(fractions, flourMatrix, flourTemperature,
+		final SimulationInputs inputs = new SimulationInputs(fractions, flourMatrix, flourTemperature,
 			airRelativeHumidity, yeastProps, dummyBaseRecipe, kneading, stages, placeholderFolds);
 
 		// Target profile parameter definitions from your custom enum
 		final BakeryProduct selectedProduct = BakeryProduct.GASTRONOMY_PAN_PIZZA;
+
 		System.out.println("Selected Target Product: " + selectedProduct.name());
 		// PRINT CALCULATED TIMELINE INSIGHTS PRIOR TO EXECUTING OPTIMIZATION RAMP
-		System.out.printf("Yeast Type Target Moisture : %.1f%%\n", targetYeastMoisture * 100.);
+		System.out.printf("Yeast Type Target Moisture : %.1f%%\n", yeastMoisture * 100.);
 		System.out.printf("Autolyse                   : %.0f min\n", autolyseMinutes);
 		final double[] window = yeastProps.getOptimalRehydrationWindow();
 		System.out.printf("Rehydration Recommended    : %.1f min\n", yeastProps.getRehydrationWindow());
@@ -87,7 +88,7 @@ public class Main1{
 
 		// --- EXECUTE THE MULTIVARIATE SEARCH OVER CONTINUOUS BOUNDS ---
 		final GlobalMultivariateRecipeOptimizer.OptimizedRecipeResult result =
-			GlobalMultivariateRecipeOptimizer.optimizeFullRecipe(initialInputs, selectedProduct);
+			GlobalMultivariateRecipeOptimizer.optimizeFullRecipe(inputs, selectedProduct);
 
 		// Reconstruct runtime fold vector array from optimized output points to run verification pass
 		final int optimizedFoldCount = result.optimizedFoldCount();
@@ -121,7 +122,7 @@ public class Main1{
 			System.out.printf("Optimized Relaxation : %.2fx geometric scaling\n", optimizedRelaxationFactor);
 			System.out.println("\n--- MECHANICAL STEP-BY-STEP WORKBOOK ---");
 			for(int i = 0; i < optimizedFoldCount; i ++){
-				BakeryProduct.HandlingInstruction stepInfo = selectedProduct.getHandlingInstructions((i + 1),
+				final BakeryProduct.HandlingInstruction stepInfo = selectedProduct.getHandlingInstructions((i + 1),
 					optimizedFoldCount, optimizedFoldsArray[i]);
 				System.out.printf("[TIMEMARK: %4.1f min] -> SET %d: %s (Intensity: %s)\n",
 					optimizedFoldsArray[i], (i + 1), stepInfo.title(), stepInfo.intensity());
