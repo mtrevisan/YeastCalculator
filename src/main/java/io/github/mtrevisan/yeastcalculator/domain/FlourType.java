@@ -20,6 +20,8 @@ package io.github.mtrevisan.yeastcalculator.domain;
  */
 public enum FlourType{
 
+	//TODO add water chestnut, foxtail millet, fava bean
+
 	// --- Wheat and its relatives (gluten-forming) ---
 	WHEAT("wheat", 0.062, 11., 0.89),
 	WHOLE_WHEAT("whole wheat", 0.062, 11.5, 0.89),
