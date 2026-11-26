@@ -1,3 +1,27 @@
+/**
+ * Copyright (c) 2026 Mauro Trevisan
+ * <p>
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ * <p>
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * <p>
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 package io.github.mtrevisan.yeastcalculator.optimization;
 
 import io.github.mtrevisan.yeastcalculator.domain.BakeryProduct;
@@ -12,12 +36,12 @@ import io.github.mtrevisan.yeastcalculator.simulation.DoughOdeSystem;
 import io.github.mtrevisan.yeastcalculator.simulation.FoldEventHandler;
 import io.github.mtrevisan.yeastcalculator.thermodynamic.GabMoistureModel;
 import org.apache.commons.math3.analysis.UnivariateFunction;
+import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
 import org.apache.commons.math3.optim.MaxEval;
 import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
 import org.apache.commons.math3.optim.univariate.BrentOptimizer;
 import org.apache.commons.math3.optim.univariate.SearchInterval;
 import org.apache.commons.math3.optim.univariate.UnivariateObjectiveFunction;
-import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
 
 import java.util.Arrays;
 
@@ -36,9 +60,9 @@ public class YeastOptimizer{
 	// Gluten development: ceiling reachable by kneading alone, and time constant of the kneading [min]
 	private static final double MAX_KNEADING_DEVELOPMENT = 0.9;
 	private static final double KNEADING_TIME_CONSTANT = 10.;
-	// Time constant of the development reached by the autolyse [min]: 30 min close about 18% of the gap, 60 min about 33%
+	// Time constant of the development reached by the autolyze [min]: 30 min close about 18% of the gap, 60 min about 33%
 	// (assumed value, to be refined with measurements)
-	private static final double AUTOLYSE_TIME_CONSTANT = 150.;
+	private static final double AUTOLYZE_TIME_CONSTANT = 150.;
 	// Fraction of the remaining development gap closed by a fully effective stretch-and-fold set
 	private static final double FOLD_DEVELOPMENT_GAIN = 0.25;
 	// Rest after which a fold is fully effective [min], and the effectiveness of a fold given right after the
@@ -180,13 +204,7 @@ public class YeastOptimizer{
 	 * </p>
 	 */
 	public static double calculateDevelopmentIndex(final SimulationInputs in, final double totalMinutes){
-		final KneadingInput kneading = in.kneading();
-		final double mixerDevelopment = Math.min(1., kneading.type().getDevelopmentEfficiency());
-		final double kneadingDevelopment = Math.min(MAX_KNEADING_DEVELOPMENT, MAX_KNEADING_DEVELOPMENT * mixerDevelopment
-			* (1. - Math.exp(-kneading.durationMinutes() / KNEADING_TIME_CONSTANT)));
-		// Autolyse: the flour hydrates and the gluten develops with no work, closing part of the remaining gap
-		final double initialDevelopment = 1. - (1. - kneadingDevelopment)
-			* Math.exp(-kneading.autolyseMinutes() / AUTOLYSE_TIME_CONSTANT);
+		final double initialDevelopment = getInitialDevelopment(in);
 
 		final double[] folds = in.folds().clone();
 		Arrays.sort(folds);
@@ -196,13 +214,23 @@ public class YeastOptimizer{
 			if(fold >= totalMinutes)
 				break;
 
-			final double relaxation = Math.min(1., Math.max(MIN_FOLD_EFFECTIVENESS, (fold - previousMinute) / FOLD_REST_MINUTES));
+			final double relaxation = Math.clamp((fold - previousMinute) / FOLD_REST_MINUTES, MIN_FOLD_EFFECTIVENESS, 1.);
 			// A fold given close to the end leaves no time to rest and recover the gas before the shaping: it counts less
-			final double lateness = Math.min(1., Math.max(0., (totalMinutes - fold) / FINAL_REST_MINUTES));
+			final double lateness = Math.clamp((totalMinutes - fold) / FINAL_REST_MINUTES, 0., 1.);
 			gap *= 1. - FOLD_DEVELOPMENT_GAIN * relaxation * lateness;
 			previousMinute = fold;
 		}
 		return 1. - gap;
+	}
+
+	private static double getInitialDevelopment(SimulationInputs in){
+		final KneadingInput kneading = in.kneading();
+		final double mixerDevelopment = Math.min(1., kneading.type().getDevelopmentEfficiency());
+		final double kneadingDevelopment = Math.min(MAX_KNEADING_DEVELOPMENT, MAX_KNEADING_DEVELOPMENT * mixerDevelopment
+			* (1. - Math.exp(-kneading.durationMinutes() / KNEADING_TIME_CONSTANT)));
+		// Autolyze: the flour hydrates and the gluten develops with no work, closing part of the remaining gap
+		return 1. - (1. - kneadingDevelopment)
+			* Math.exp(-kneading.autolyseMinutes() / AUTOLYZE_TIME_CONSTANT);
 	}
 
 	/**
@@ -255,30 +283,7 @@ public class YeastOptimizer{
 		// rehydration (for example through a Poolish or Biga phase) and the initial state is
 		// set directly by preConditioner.applyToInitialState. In that case the rehydration
 		// penalty is skipped entirely to avoid double-counting the plugin's work.
-		double rehydrationEfficiencyModifier = 1.;
-		if(preConditioner == null){
-			final double rehydrationWindowHours = yeastInput.getRehydrationWindow() / 60.;
-			final double[] optimalWindow = yeastInput.getOptimalRehydrationWindow();
-			final double minHours = optimalWindow[0] / 60.;
-			final double maxHours = optimalWindow[1] / 60.;
-
-			if(yeastMoisture >= 0.65){
-				// --- FRESH YEAST PATHWAY (e.g., 70% moisture panetto) ---
-				// Cells are awake and active. If left floating in pure water without substrates
-				// for too long, autolysis and early starvation acceleration triggers.
-				if(rehydrationWindowHours > maxHours)
-					rehydrationEfficiencyModifier = Math.max(0.4, 1. - (rehydrationWindowHours - maxHours) * 0.8);
-			}
-			else{
-				// --- DEHYDRATED DRY YEAST PATHWAY (e.g., active dry yeast) ---
-				// Structural mummified cells require a rigid timeline to safely re-swell membrane
-				// proteins. Below the lower bound: shear trauma. Above the upper bound: starvation.
-				if(rehydrationWindowHours < minHours)
-					rehydrationEfficiencyModifier = 0.6 + (rehydrationWindowHours / minHours) * 0.4;
-				else if(rehydrationWindowHours > maxHours)
-					rehydrationEfficiencyModifier = Math.max(0.5, 1. - (rehydrationWindowHours - maxHours) * 0.4);
-			}
-		}
+		double rehydrationEfficiencyModifier = getRehydrationEfficiencyModifier(preConditioner, yeastInput, yeastMoisture);
 
 		// Set initial conditions for state variables: [Biomass X, Sugars S, Gas Volume V, Ethanol EtOH, Damaged starch D, Physiological state h]
 		final double initialX = yeastRatio * (1. - yeastMoisture) * rehydrationEfficiencyModifier;
@@ -292,7 +297,7 @@ public class YeastOptimizer{
 		// Build the direct dough baseline state array vector
 		double initialDamagedStarch = damagedStarchOf(in);
 
-		// Autolyse: the amylases work on the damaged starch while flour and water rest together (at the temperature of
+		// Autolyze: the amylases work on the damaged starch while flour and water rest together (at the temperature of
 		// the flour), before the yeast is added
 		final double autolyseHydrolysis = initialDamagedStarch * DoughOdeSystem.starchHydrolysisFraction(
 			in.kneading().autolyseMinutes(), in.flourTemperature(), in.recipe().waterRatio() + gab.flourActiveWater);
@@ -339,6 +344,35 @@ public class YeastOptimizer{
 			currentTime = stageEndTime;
 		}
 		return y;
+	}
+
+	private static double getRehydrationEfficiencyModifier(final PrefermentPlugin.StatePreConditioner preConditioner,
+		   final YeastInput yeastInput, final double yeastMoisture){
+		double rehydrationEfficiencyModifier = 1.;
+		if(preConditioner == null){
+			final double rehydrationWindowHours = yeastInput.getRehydrationWindow() / 60.;
+			final double[] optimalWindow = yeastInput.getOptimalRehydrationWindow();
+			final double minHours = optimalWindow[0] / 60.;
+			final double maxHours = optimalWindow[1] / 60.;
+
+			if(yeastMoisture >= 0.65){
+				// --- FRESH YEAST PATHWAY (e.g., 70% moisture panetto) ---
+				// Cells are awake and active. If left floating in pure water without substrates
+				// for too long, autolysis and early starvation acceleration triggers.
+				if(rehydrationWindowHours > maxHours)
+					rehydrationEfficiencyModifier = Math.max(0.4, 1. - (rehydrationWindowHours - maxHours) * 0.8);
+			}
+			else{
+				// --- DEHYDRATED DRY YEAST PATHWAY (e.g., active dry yeast) ---
+				// Structural mummified cells require a rigid timeline to safely re-swell membrane
+				// proteins. Below the lower bound: shear trauma. Above the upper bound: starvation.
+				if(rehydrationWindowHours < minHours)
+					rehydrationEfficiencyModifier = 0.6 + (rehydrationWindowHours / minHours) * 0.4;
+				else if(rehydrationWindowHours > maxHours)
+					rehydrationEfficiencyModifier = Math.max(0.5, 1. - (rehydrationWindowHours - maxHours) * 0.4);
+			}
+		}
+		return rehydrationEfficiencyModifier;
 	}
 
 	/**

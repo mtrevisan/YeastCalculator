@@ -1,3 +1,27 @@
+/**
+ * Copyright (c) 2026 Mauro Trevisan
+ * <p>
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ * <p>
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * <p>
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 package io.github.mtrevisan.yeastcalculator.thermodynamic;
 
 import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
@@ -42,6 +66,7 @@ class GabMoistureModelTest{
 		COMPOSITION.put(FlourType.MAIZE, new double[]{0.08, 0.03});
 		COMPOSITION.put(FlourType.RICE, new double[]{0.07, 0.01});
 		COMPOSITION.put(FlourType.MILLET, new double[]{0.11, 0.04});
+		COMPOSITION.put(FlourType.FOXTAIL_MILLET, new double[]{0.12, 0.07});
 		COMPOSITION.put(FlourType.SORGHUM, new double[]{0.10, 0.06});
 		COMPOSITION.put(FlourType.BUCKWHEAT, new double[]{0.13, 0.10});
 		COMPOSITION.put(FlourType.QUINOA, new double[]{0.14, 0.07});
@@ -50,8 +75,10 @@ class GabMoistureModelTest{
 		COMPOSITION.put(FlourType.CHICKPEA, new double[]{0.22, 0.11});
 		COMPOSITION.put(FlourType.LENTIL, new double[]{0.25, 0.11});
 		COMPOSITION.put(FlourType.PEA, new double[]{0.23, 0.15});
+		COMPOSITION.put(FlourType.FAVA_BEAN, new double[]{0.26, 0.13});
 		COMPOSITION.put(FlourType.SOY, new double[]{0.36, 0.09});
 		COMPOSITION.put(FlourType.CHESTNUT, new double[]{0.06, 0.07});
+		COMPOSITION.put(FlourType.WATER_CHESTNUT, new double[]{0.04, 0.035});
 		COMPOSITION.put(FlourType.ALMOND, new double[]{0.21, 0.12});
 		COMPOSITION.put(FlourType.COCONUT, new double[]{0.18, 0.38});
 		COMPOSITION.put(FlourType.HAZELNUT, new double[]{0.15, 0.10});
@@ -103,6 +130,109 @@ class GabMoistureModelTest{
 				assertTrue(total(r) >= 0.03 / 1.03 - EPS, "moisture below lower clamp: " + msg);
 				assertTrue(total(r) < 0.20, "moisture above 20% w.b.: " + msg);
 			}
+	}
+
+	/**
+	 * Expected equilibrium moisture [% w.b.] at 20°C and water activity 0.30, 0.50, 0.65, as [min, max] pairs.
+	 * <p>
+	 * The ranges are typical values of the sorption-isotherm literature on flours (type II isotherms; e.g. Moreira et al.,
+	 * 2010, for chestnut and wheat flours): starchy flours hold about 7-9 % at a<sub>w</sub> 0.3, 10-12 % at 0.5 and 13-14.5 %
+	 * at 0.65, whole-grain/fibrous flours about 1 point more, pulses about 1.5 points less at medium humidity, fat-rich nuts
+	 * and seeds much less.
+	 * </p>
+	 */
+	private enum Band{
+		STARCHY(6.5, 9.5, 9.5, 12.5, 12., 15.),
+		FIBROUS(7., 10., 10., 13., 12.5, 15.5),
+		PULSE(6., 8.5, 8.5, 10.5, 11.5, 13.5),
+		COCONUT(5.5, 8.5, 8., 10.5, 10.5, 13.5),
+		NUT(2.5, 5., 4., 7., 6., 9.),
+		SEED(4., 6.5, 6., 9., 8.5, 12.);
+
+		private static final double[] WATER_ACTIVITY = {0.3, 0.5, 0.65};
+
+		private final double[] min = new double[3];
+		private final double[] max = new double[3];
+
+		Band(final double min30, final double max30, final double min50, final double max50, final double min65,
+				final double max65){
+			min[0] = min30;
+			max[0] = max30;
+			min[1] = min50;
+			max[1] = max50;
+			min[2] = min65;
+			max[2] = max65;
+		}
+	}
+
+	private static final Map<FlourType, Band> BANDS = new EnumMap<>(FlourType.class);
+	static{
+		for(final FlourType type : FlourType.values())
+			BANDS.put(type, Band.STARCHY);
+		for(final FlourType type : new FlourType[]{FlourType.WHOLE_WHEAT, FlourType.WHOLE_RYE, FlourType.WHOLE_SPELT,
+				FlourType.WHOLE_EINKORN, FlourType.WHOLE_EMMER, FlourType.WHOLE_KHORASAN, FlourType.OAT, FlourType.FOXTAIL_MILLET,
+				FlourType.BUCKWHEAT, FlourType.QUINOA, FlourType.AMARANTH, FlourType.TEFF})
+			BANDS.put(type, Band.FIBROUS);
+		for(final FlourType type : new FlourType[]{FlourType.CHICKPEA, FlourType.LENTIL, FlourType.PEA, FlourType.FAVA_BEAN,
+				FlourType.SOY})
+			BANDS.put(type, Band.PULSE);
+		BANDS.put(FlourType.COCONUT, Band.COCONUT);
+		for(final FlourType type : new FlourType[]{FlourType.ALMOND, FlourType.HAZELNUT, FlourType.SESAME})
+			BANDS.put(type, Band.NUT);
+		BANDS.put(FlourType.FLAXSEED, Band.SEED);
+		BANDS.put(FlourType.HEMP, Band.SEED);
+	}
+
+
+	@Test
+	void everyFlourHasALiteratureBand(){
+		for(final FlourType type : FlourType.values())
+			assertTrue(BANDS.containsKey(type), "missing literature band for " + type);
+	}
+
+	@Test
+	void moistureMatchesLiteratureAtLowMediumAndHighHumidity(){
+		for(final FlourType type : FlourType.values()){
+			final Band band = BANDS.get(type);
+			for(int i = 0; i < Band.WATER_ACTIVITY.length; i ++){
+				final double moisture = total(single(type, 20., Band.WATER_ACTIVITY[i])) * 100.;
+
+				assertTrue(moisture >= band.min[i] && moisture <= band.max[i],
+					String.format("%s at a_w %.2f: %.2f %% w.b. outside literature range [%.1f, %.1f]", type,
+						Band.WATER_ACTIVITY[i], moisture, band.min[i], band.max[i]));
+			}
+		}
+	}
+
+	@Test
+	void chestnutMonolayerMatchesMoreira2010(){
+		// monolayer 0.059 ± 0.007 g/g d.b. (GAB, chestnut flour); the model monolayer is back-calculated from the wet-basis results
+		final GabMoistureModel.GabResult r = single(FlourType.CHESTNUT, 20., 0.5);
+		final double monolayerDB = r.flourStrictlyBoundWater / (1. - total(r));
+
+		assertEquals(0.059, monolayerDB, 0.007);
+	}
+
+	@Test
+	void legumesAreDrierThanCerealsAtMediumHumidity(){
+		final double wheat = total(single(FlourType.WHEAT, 20., 0.65));
+		for(final FlourType type : new FlourType[]{FlourType.CHICKPEA, FlourType.LENTIL, FlourType.PEA, FlourType.FAVA_BEAN,
+				FlourType.SOY})
+			assertTrue(total(single(type, 20., 0.65)) < wheat, type + " should be drier than wheat at a_w 0.65");
+	}
+
+	@Test
+	void newFloursAreInTheRightNeighbourhood(){
+		final double millet = total(single(FlourType.MILLET, 20., 0.5));
+		final double foxtail = total(single(FlourType.FOXTAIL_MILLET, 20., 0.5));
+		final double pea = total(single(FlourType.PEA, 20., 0.5));
+		final double fava = total(single(FlourType.FAVA_BEAN, 20., 0.5));
+		final double wheat = total(single(FlourType.WHEAT, 20., 0.5));
+		final double waterChestnut = total(single(FlourType.WATER_CHESTNUT, 20., 0.5));
+
+		assertEquals(millet, foxtail, 0.015);
+		assertEquals(pea, fava, 0.01);
+		assertEquals(wheat, waterChestnut, 0.015);
 	}
 
 	@Test

@@ -1,3 +1,27 @@
+/**
+ * Copyright (c) 2026 Mauro Trevisan
+ * <p>
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ * <p>
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * <p>
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 package io.github.mtrevisan.yeastcalculator.thermodynamic;
 
 import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
@@ -43,7 +67,7 @@ public class GabMoistureModel{
 		final double[] dryMassComponent = new double[numFlours];
 		double totalDryMassComponent = 0.;
 
-		final double aw = clamp(in.airRelativeHumidity(), 0.1, 0.95);
+		final double aw = Math.clamp(in.airRelativeHumidity(), 0.1, 0.95);
 		final double temperatureCoeff = 1. - 0.0025 * (in.flourTemperature() - 20.);
 
 		for(int i = 0; i < numFlours; i ++){
@@ -56,7 +80,7 @@ public class GabMoistureModel{
 				/ ((1. - tmp) * (1. + (type.getcGab() - 1.) * tmp));
 			// The total moisture can never be below the monolayer: protein- and fiber-rich flours (soy, pulses) have a
 			// monolayer above the usual clamp bounds, which would otherwise give a negative active water
-			uTotalDB[i] = clamp(uEquilibriumDB * temperatureCoeff, Math.max(0.03, wmDB[i]), Math.max(0.2, wmDB[i]));
+			uTotalDB[i] = Math.clamp(uEquilibriumDB * temperatureCoeff, Math.max(0.03, wmDB[i]), Math.max(0.2, wmDB[i]));
 			flourMoistureWB[i] = uTotalDB[i] / (1. + uTotalDB[i]);
 			dryMassComponent[i] = fractions[i] * (1. - flourMoistureWB[i]);
 			totalDryMassComponent += dryMassComponent[i];
@@ -75,8 +99,5 @@ public class GabMoistureModel{
 		return new GabResult(boundWater, activeWater);
 	}
 
-	private static double clamp(final double x, final double lo, final double hi){
-		return (x < lo? lo: (x > hi? hi: x));
-	}
 
 }

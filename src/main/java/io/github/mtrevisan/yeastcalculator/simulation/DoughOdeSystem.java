@@ -1,3 +1,27 @@
+/**
+ * Copyright (c) 2026 Mauro Trevisan
+ * <p>
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ * <p>
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * <p>
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 package io.github.mtrevisan.yeastcalculator.simulation;
 
 import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
@@ -150,47 +174,14 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		// bound and does not dissolve solutes) [g/g_flour]
 		final double solventWater = waterRatio + activeWater;
 		// Dry flour solids [g/g_flour]
-		final double drySolids = 1. - boundWater - activeWater;
-
-		// Molality of salt (moles of NaCl per kg of solvent water); all ratios are per gram of flour, hence the
-		// grams-to-kilograms conversion of the water mass
-		final double molesSalt = saltRatio / NACL_MOLAR_MASS;
-		final double kgWater = solventWater / 1000.;
-		final double molalitySalt = (kgWater > 0.? molesSalt / kgWater: 0.);
-
-		// aw due to salt: exp(-0.018 * phi * nu * m) where phi=0.93, nu=2
-		final double awSalt = Math.exp(-0.018 * 0.93 * 2. * molalitySalt);
-
-		// aw due to the hydrated flour matrix: the more water per unit of dry solids, the closer to pure water
-		final double awMatrix = (solventWater > 0.? Math.exp(-K_MATRIX * drySolids / solventWater): 0.);
-
-		// The total aw is the product of the matrix and the salt contributions
-		final double totalAw = Math.min(1., awMatrix * awSalt);
-
-		// Cardinal inhibition via aw (Rosso et al., 1995)
-		double gammaAw = 0.;
-		if(totalAw > AW_MIN)
-			gammaAw = (totalAw - AW_MIN) / (1. - AW_MIN);
+		double gammaAw = getGammaAw(saltRatio, solventWater);
 
 		// --- 2. ETHANOL TOXICITY INHIBITION (Ghose & Tyagi, 1979) ---
 		double gammaEthanol = 1. - Math.pow(Math.min(1., EtOH / ETHANOL_MAX), ETHANOL_N);
 
 		// Mineral/Ash nutrient boosting scaling.
 		// The ash contribution is weighted by the flour fraction in the blend.
-		double blendAsh = 0.;
-		final double[] fractions = in.fractions();
-		final FlourInput[] flourMatrix = in.flourMatrix();
-		for(int i = 0; i < flourMatrix.length; i ++)
-			blendAsh += fractions[i] * flourMatrix[i].ash();
-		final double adjustedMuOpt = BASE_MU_OPT * (1. + Math.min(0.25, blendAsh * 15.));
-		final double gammaT = calculateRossoGammaT(currentTemperature);
-
-		// Fat/Oil membrane screening penalty
-		final double oilRatio = in.recipe().oilRatio();
-		final double gammaOilInhibition = 1. / (1. + 2.5 * oilRatio);
-
-		// Growth rate without substrate, ethanol and lag limitations: it also drives the adaptation of the cells
-		final double muPotential = adjustedMuOpt * gammaT * gammaAw * gammaOilInhibition;
+		final double muPotential = getMuPotential(gammaAw);
 
 		// Lag phase (Baranyi & Roberts, 1994): the fraction of the cells' growth capacity available is
 		// alpha = q / (1 + q) = 1 / (1 + exp(-h)), where h = ln(q) is the physiological state. It grows at the same
@@ -224,7 +215,7 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		// reaction needs water), and zero below the minimum temperature
 		final double starchTemperatureFactor = (currentTemperature > T_MIN?
 			Math.pow(STARCH_Q10, (currentTemperature - STARCH_REFERENCE_TEMPERATURE) / 10.): 0.);
-		final double starchHydrationFactor = Math.min(1.5, Math.max(0.5, solventWater / STARCH_REFERENCE_SOLVENT));
+		final double starchHydrationFactor = Math.clamp(solventWater / STARCH_REFERENCE_SOLVENT, 0.5, 1.5);
 		final double starchHydrolysis = STARCH_HYDROLYSIS_RATE * starchTemperatureFactor * starchHydrationFactor
 			* damagedStarch;
 
@@ -259,6 +250,52 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 		yDot[6] = muEff / Math.log(2.);
 	}
 
+	private double getMuPotential(final double gammaAw){
+		double blendAsh = 0.;
+		final double[] fractions = in.fractions();
+		final FlourInput[] flourMatrix = in.flourMatrix();
+		for(int i = 0; i < flourMatrix.length; i ++)
+			blendAsh += fractions[i] * flourMatrix[i].ash();
+		final double adjustedMuOpt = BASE_MU_OPT * (1. + Math.min(0.25, blendAsh * 15.));
+		final double gammaT = calculateRossoGammaT(currentTemperature);
+
+		// Fat/Oil membrane screening penalty
+		final double oilRatio = in.recipe().oilRatio();
+		final double gammaOilInhibition = 1. / (1. + 2.5 * oilRatio);
+
+		// Growth rate without substrate, ethanol and lag limitations: it also drives the adaptation of the cells
+		return adjustedMuOpt * gammaT * gammaAw * gammaOilInhibition;
+	}
+
+	private double getGammaAw(final double saltRatio, final double solventWater){
+		final double drySolids = 1. - boundWater - activeWater;
+
+		// Molality of salt (moles of NaCl per kg of solvent water); all ratios are per gram of flour, hence the
+		// grams-to-kilograms conversion of the water mass
+		final double molesSalt = saltRatio / NACL_MOLAR_MASS;
+		final double totalAw = getTotalAw(solventWater, molesSalt, drySolids);
+
+		// Cardinal inhibition via aw (Rosso et al., 1995)
+		double gammaAw = 0.;
+		if(totalAw > AW_MIN)
+			gammaAw = (totalAw - AW_MIN) / (1. - AW_MIN);
+		return gammaAw;
+	}
+
+	private static double getTotalAw(final double solventWater, final double molesSalt, final double drySolids){
+		final double kgWater = solventWater / 1000.;
+		final double molalitySalt = (kgWater > 0.? molesSalt / kgWater: 0.);
+
+		// aw due to salt: exp(-0.018 * phi * nu * m) where phi=0.93, nu=2
+		final double awSalt = Math.exp(-0.018 * 0.93 * 2. * molalitySalt);
+
+		// aw due to the hydrated flour matrix: the more water per unit of dry solids, the closer to pure water
+		final double awMatrix = (solventWater > 0.? Math.exp(-K_MATRIX * drySolids / solventWater): 0.);
+
+		// The total aw is the product of the matrix and the salt contributions
+		return Math.min(1., awMatrix * awSalt);
+	}
+
 	/**
 	 * Initial physiological state ln(q0) of the yeast, from the work to be done before the exponential growth starts
 	 * h0 = ln(1 + 1 / q0) (lag = h0 / mu).
@@ -276,7 +313,7 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 	/**
 	 * Fraction of the damaged starch hydrolyzed by the flour's amylases in a given time at a constant temperature, with
 	 * the same kinetics used during the fermentation (first order, Q10 on the temperature, scaled by the water
-	 * available). It is used for the autolyse, when the flour and the water rest together before the yeast is added.
+	 * available). It is used for the autolyze, when the flour and the water rest together before the yeast is added.
 	 *
 	 * @param minutes	Duration [min].
 	 * @param temperature	Temperature of the dough [°C].
@@ -289,7 +326,7 @@ public class DoughOdeSystem implements FirstOrderDifferentialEquations{
 			return 0.;
 
 		final double temperatureFactor = Math.pow(STARCH_Q10, (temperature - STARCH_REFERENCE_TEMPERATURE) / 10.);
-		final double hydrationFactor = Math.min(1.5, Math.max(0.5, solventWater / STARCH_REFERENCE_SOLVENT));
+		final double hydrationFactor = Math.clamp(solventWater / STARCH_REFERENCE_SOLVENT, 0.5, 1.5);
 		return 1. - Math.exp(-STARCH_HYDROLYSIS_RATE * temperatureFactor * hydrationFactor * minutes);
 	}
 

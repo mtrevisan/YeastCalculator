@@ -1,3 +1,27 @@
+/**
+ * Copyright (c) 2026 Mauro Trevisan
+ * <p>
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ * <p>
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * <p>
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 package io.github.mtrevisan.yeastcalculator.optimization;
 
 import io.github.mtrevisan.yeastcalculator.domain.BakeryProduct;
@@ -6,13 +30,13 @@ import io.github.mtrevisan.yeastcalculator.domain.FlourInput;
 import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
 import io.github.mtrevisan.yeastcalculator.domain.StageInput;
 import org.apache.commons.math3.exception.MathIllegalStateException;
-import org.apache.commons.math3.optim.MaxEval;
 import org.apache.commons.math3.optim.InitialGuess;
+import org.apache.commons.math3.optim.MaxEval;
+import org.apache.commons.math3.optim.PointValuePair;
 import org.apache.commons.math3.optim.SimpleBounds;
 import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
 import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction;
 import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.BOBYQAOptimizer;
-import org.apache.commons.math3.optim.PointValuePair;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -54,24 +78,7 @@ public class GlobalMultivariateRecipeOptimizer{
 			final BakeryProduct targetProduct){
 		// --- AUTOMATIC HYDRATION CAP HANDLER (BIOCHEMICAL WAC MODEL) ---
 		// Resolves the weighted average characteristics of the flour blend matrix
-		double blendedProtein = 0.;
-		double blendedFiber = 0.;
-		double estimatedDamagedStarch = 0.;
-		final double[] fractions = baseInputs.fractions();
-		final FlourInput[] flours = baseInputs.flourMatrix();
-
-		for(int i = 0; i < flours.length; i ++){
-			blendedProtein += fractions[i] * flours[i].protein();
-			blendedFiber += fractions[i] * flours[i].fiber();
-			estimatedDamagedStarch += fractions[i] * flours[i].estimatedDamagedStarch();
-		}
-
-		// The damaged starch is estimated from the flour strength W (see FlourInput.estimatedDamagedStarch)
-		// Predictive Water Absorption Capacity (WAC) baseline linear regression formula:
-		// Proteins absorb ~1.3x their dry weight, fibers absorb ~2.1x, damaged starch absorbs ~2.5x.
-		final double baselineWac = 0.46 + 1.35 * blendedProtein + 2.10 * blendedFiber + 2.50 * estimatedDamagedStarch;
-		// Adjust absorption cell ceiling slightly based on product style tolerances (e.g. Pan pizza handles more water than freestanding loaves)
-		double dynamicHydrationCap = baselineWac;
+		double dynamicHydrationCap = getDynamicHydrationCap(baseInputs);
 		if(targetProduct == BakeryProduct.ROMAN_PAN_PIZZA)
 			// High aeration pan styles can push boundaries via mechanical support
 			dynamicHydrationCap += 0.08;
@@ -89,10 +96,9 @@ public class GlobalMultivariateRecipeOptimizer{
 		// biscuit, not a bread), within the water the flour can absorb. The cost of formulation keeps the optimum inside
 		// the envelope; the margin lets the search see its edges.
 		final BakeryProduct.RecipeEnvelope envelope = targetProduct.getRecipeEnvelope();
-		final double hydrationLowerBound = Math.min(Math.max(0.50, envelope.hydrationMin() - ENVELOPE_MARGIN_HYDRATION),
+		final double hydrationLowerBound = Math.clamp(envelope.hydrationMin() - ENVELOPE_MARGIN_HYDRATION, 0.50,
 			dynamicHydrationCap - 0.02);
-		final double hydrationUpperBound = Math.max(hydrationLowerBound + 0.02,
-			Math.min(dynamicHydrationCap, envelope.hydrationMax() + ENVELOPE_MARGIN_HYDRATION));
+		final double hydrationUpperBound = Math.clamp(dynamicHydrationCap, hydrationLowerBound + 0.02, envelope.hydrationMax() + ENVELOPE_MARGIN_HYDRATION);
 		final double[] lowerBounds = new double[]{hydrationLowerBound, Math.max(0.01, envelope.saltMin() - ENVELOPE_MARGIN_SALT),
 			Math.max(0., envelope.oilMin() - ENVELOPE_MARGIN_OIL), 0., 15., 1.};
 		final double[] upperBounds = new double[]{hydrationUpperBound, envelope.saltMax() + ENVELOPE_MARGIN_SALT,
@@ -173,6 +179,25 @@ public class GlobalMultivariateRecipeOptimizer{
 		final double bestYeast = YeastOptimizer.findOptimalYeast(finalInputs, targetProduct, null);
 
 		return new OptimizedRecipeResult(bestRecipe, bestYeast, best.fitness(), appliedFolds, p[4], p[5]);
+	}
+
+	private static double getDynamicHydrationCap(final SimulationInputs baseInputs){
+		double blendedProtein = 0.;
+		double blendedFiber = 0.;
+		double estimatedDamagedStarch = 0.;
+		final double[] fractions = baseInputs.fractions();
+		final FlourInput[] flours = baseInputs.flourMatrix();
+
+		for(int i = 0; i < flours.length; i ++){
+			blendedProtein += fractions[i] * flours[i].protein();
+			blendedFiber += fractions[i] * flours[i].fiber();
+			estimatedDamagedStarch += fractions[i] * flours[i].estimatedDamagedStarch();
+		}
+
+		// The damaged starch is estimated from the flour strength W (see FlourInput.estimatedDamagedStarch)
+		// Predictive Water Absorption Capacity (WAC) baseline linear regression formula:
+		// Proteins absorb ~1.3x their dry weight, fibers absorb ~2.1x, damaged starch absorbs ~2.5x.
+		return 0.46 + 1.35 * blendedProtein + 2.10 * blendedFiber + 2.50 * estimatedDamagedStarch;
 	}
 
 }

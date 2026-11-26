@@ -1,7 +1,31 @@
+/**
+ * Copyright (c) 2026 Mauro Trevisan
+ * <p>
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ * <p>
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * <p>
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 package io.github.mtrevisan.yeastcalculator.plugin;
 
-import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
 import io.github.mtrevisan.yeastcalculator.domain.DoughRecipe;
+import io.github.mtrevisan.yeastcalculator.domain.SimulationInputs;
 
 
 public class PoolishPlugin implements PrefermentPlugin{
@@ -26,30 +50,7 @@ public class PoolishPlugin implements PrefermentPlugin{
 
 	@Override
 	public PrefermentDecorator interceptAndPreCondition(final SimulationInputs rawInputs){
-		final DoughRecipe originalRecipe = rawInputs.recipe();
-
-		// --- 1. RECIPE WATER ---
-		// A traditional Poolish uses equal weights of flour and water (100% hydration relative to itself), so
-		// flourFractionInPoolish of the recipe water goes into the Poolish. The dough that ferments after the mixing
-		// contains ALL the water of the recipe (the Poolish water is not lost), so the water ratio seen by the
-		// simulation (water activity, hydration) is the total one, not the refresh water.
-
-		final DoughRecipe decoratedRecipe = new DoughRecipe(
-			originalRecipe.waterRatio(),
-			originalRecipe.saltRatio(),
-			originalRecipe.oilRatio(),
-			originalRecipe.maltRatio(),
-			originalRecipe.maltSugarContent(),
-			originalRecipe.maltPollakUnit(),
-			// High water poolish lubricates initial mix, reducing friction heat
-			Math.max(0., originalRecipe.mixerFrictionFactor() - 0.5)
-		);
-
-		final SimulationInputs decoratedInputs = new SimulationInputs(
-			rawInputs.fractions(), rawInputs.flourMatrix(), rawInputs.flourTemperature(),
-			rawInputs.airRelativeHumidity(), rawInputs.yeastProperties(), decoratedRecipe,
-			rawInputs.kneading(), rawInputs.stages(), rawInputs.folds()
-		);
+		final SimulationInputs decoratedInputs = getDecoratedInputs(rawInputs);
 
 		// --- 2. CLOSED STATE PRE-CONDITIONER INTERCEPTOR HOOK ---
 		final StatePreConditioner preConditioner = (initialY, totalFlourSugarBudget) -> {
@@ -97,6 +98,33 @@ public class PoolishPlugin implements PrefermentPlugin{
 		};
 
 		return new PrefermentDecorator(decoratedInputs, preConditioner);
+	}
+
+	private static SimulationInputs getDecoratedInputs(final SimulationInputs rawInputs){
+		final DoughRecipe originalRecipe = rawInputs.recipe();
+
+		// --- 1. RECIPE WATER ---
+		// A traditional Poolish uses equal weights of flour and water (100% hydration relative to itself), so
+		// flourFractionInPoolish of the recipe water goes into the Poolish. The dough that ferments after the mixing
+		// contains ALL the water of the recipe (the Poolish water is not lost), so the water ratio seen by the
+		// simulation (water activity, hydration) is the total one, not the refresh water.
+
+		final DoughRecipe decoratedRecipe = new DoughRecipe(
+			originalRecipe.waterRatio(),
+			originalRecipe.saltRatio(),
+			originalRecipe.oilRatio(),
+			originalRecipe.maltRatio(),
+			originalRecipe.maltSugarContent(),
+			originalRecipe.maltPollakUnit(),
+			// High water poolish lubricates initial mix, reducing friction heat
+			Math.max(0., originalRecipe.mixerFrictionFactor() - 0.5)
+		);
+
+		return new SimulationInputs(
+			rawInputs.fractions(), rawInputs.flourMatrix(), rawInputs.flourTemperature(),
+			rawInputs.airRelativeHumidity(), rawInputs.yeastProperties(), decoratedRecipe,
+			rawInputs.kneading(), rawInputs.stages(), rawInputs.folds()
+		);
 	}
 
 }

@@ -1,3 +1,27 @@
+/**
+ * Copyright (c) 2026 Mauro Trevisan
+ * <p>
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ * <p>
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * <p>
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 package io.github.mtrevisan.yeastcalculator.domain;
 
 
@@ -30,19 +54,7 @@ public enum BakeryProduct{
 		public double computeFitness(final double finalVolume, final double maxPotential, final double referencePotential,
 				final double residualSugar,
 				final double finalYeast, final double finalYeastDot){
-			final double kTear = 1.5;
-			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
-
-			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
-
-			double rheologicalPenalty = 0.;
-			if(retentionEfficiency < 0.92)
-				// Heavily penalize if it enters the gas leakage phase (loses extensibility, tears during stretching)
-				rheologicalPenalty += getTearingPenaltyMultiplier() * 120. * (0.92 - retentionEfficiency);
-			else if(finalVolume < effectiveUnderproofThreshold)
-				// Penalize if underproofed (dough will be too elastic and spring back)
-				rheologicalPenalty += getUnderproofPenaltyCoefficient()
-					* (effectiveUnderproofThreshold - finalVolume);
+			double rheologicalPenalty = getRheologicalPenalty(finalVolume, maxPotential, referencePotential);
 
 			// Biochemical check: Protect sugars for high-heat browning control
 			// NOTE: threshold lowered from 0.009 to 0.003 (0.3% residual sugar) because a direct
@@ -62,6 +74,24 @@ public enum BakeryProduct{
 			final double kineticPenalty = Math.abs(finalYeastDot) * 8.;
 
 			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
+		}
+
+		private double getRheologicalPenalty(final double finalVolume, final double maxPotential,
+				final double referencePotential){
+			final double kTear = 1.5;
+			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
+
+			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
+
+			double rheologicalPenalty = 0.;
+			if(retentionEfficiency < 0.92)
+				// Heavily penalize if it enters the gas leakage phase (loses extensibility, tears during stretching)
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 120. * (0.92 - retentionEfficiency);
+			else if(finalVolume < effectiveUnderproofThreshold)
+				// Penalize if underproofed (dough will be too elastic and spring back)
+				rheologicalPenalty += getUnderproofPenaltyCoefficient()
+					* (effectiveUnderproofThreshold - finalVolume);
+			return rheologicalPenalty;
 		}
 
 		@Override
@@ -86,19 +116,7 @@ public enum BakeryProduct{
 		public double computeFitness(final double finalVolume, final double maxPotential, final double referencePotential,
 				final double residualSugar,
 				final double finalYeast, final double finalYeastDot){
-			final double kTear = 1.5;
-			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
-
-			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
-
-			double rheologicalPenalty = 0.;
-			if(retentionEfficiency < 0.82)
-				// Severe overproofing penalty: gas bubbles are merging, walls are thinning out, collapse imminent
-				rheologicalPenalty += getTearingPenaltyMultiplier() * 150. * (0.82 - retentionEfficiency);
-			else if(finalVolume < effectiveUnderproofThreshold)
-				// Underproofing penalty: structure is dense, missing the classic open alveolar expansion
-				rheologicalPenalty += getUnderproofPenaltyCoefficient()
-					* (effectiveUnderproofThreshold - finalVolume);
+			double rheologicalPenalty = getRheologicalPenalty(finalVolume, maxPotential, referencePotential);
 
 			// NOTE: threshold lowered from 0.013 to 0.004. Roman pan pizza is typically fermented
 			// for 18-24 h at room temperature, so most fermentable sugars are consumed; a residual
@@ -114,6 +132,24 @@ public enum BakeryProduct{
 			final double kineticPenalty = Math.abs(finalYeastDot) * 5.;
 
 			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
+		}
+
+		private double getRheologicalPenalty(final double finalVolume, final double maxPotential,
+				final double referencePotential){
+			final double kTear = 1.5;
+			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
+
+			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
+
+			double rheologicalPenalty = 0.;
+			if(retentionEfficiency < 0.82)
+				// Severe overproofing penalty: gas bubbles are merging, walls are thinning out, collapse imminent
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 150. * (0.82 - retentionEfficiency);
+			else if(finalVolume < effectiveUnderproofThreshold)
+				// Underproofing penalty: structure is dense, missing the classic open alveolar expansion
+				rheologicalPenalty += getUnderproofPenaltyCoefficient()
+					* (effectiveUnderproofThreshold - finalVolume);
+			return rheologicalPenalty;
 		}
 
 		@Override
@@ -149,19 +185,7 @@ public enum BakeryProduct{
 		public double computeFitness(final double finalVolume, final double maxPotential, final double referencePotential,
 				final double residualSugar,
 				final double finalYeast, final double finalYeastDot){
-			final double kTear = 1.5;
-			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
-
-			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
-
-			double rheologicalPenalty = 0.;
-			if(retentionEfficiency < 0.85)
-				// Overproofed: Gluten walls are tearing, causing non-uniform large air pockets
-				rheologicalPenalty += getTearingPenaltyMultiplier() * 130. * (0.85 - retentionEfficiency);
-			else if(finalVolume < effectiveUnderproofThreshold)
-				// Underproofed: The crumb will be overly dense, heavy, and lack soft sponginess
-				rheologicalPenalty += getUnderproofPenaltyCoefficient()
-					* (effectiveUnderproofThreshold - finalVolume);
+			double rheologicalPenalty = getRheologicalPenalty(finalVolume, maxPotential, referencePotential);
 
 			double sugarPenalty = 0.;
 			if(residualSugar < getMinSafeSugarThreshold())
@@ -175,6 +199,24 @@ public enum BakeryProduct{
 			final double kineticPenalty = Math.abs(finalYeastDot) * 6.;
 
 			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + kineticPenalty;
+		}
+
+		private double getRheologicalPenalty(final double finalVolume, final double maxPotential,
+				final double referencePotential){
+			final double kTear = 1.5;
+			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
+
+			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
+
+			double rheologicalPenalty = 0.;
+			if(retentionEfficiency < 0.85)
+				// Overproofed: Gluten walls are tearing, causing non-uniform large air pockets
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 130. * (0.85 - retentionEfficiency);
+			else if(finalVolume < effectiveUnderproofThreshold)
+				// Underproofed: The crumb will be overly dense, heavy, and lack soft sponginess
+				rheologicalPenalty += getUnderproofPenaltyCoefficient()
+					* (effectiveUnderproofThreshold - finalVolume);
+			return rheologicalPenalty;
 		}
 
 		@Override
@@ -210,19 +252,7 @@ public enum BakeryProduct{
 		public double computeFitness(final double finalVolume, final double maxPotential, final double referencePotential,
 				final double residualSugar,
 				final double finalYeast, final double finalYeastDot){
-			final double kTear = 1.5;
-			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
-
-			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
-
-			double rheologicalPenalty = 0.;
-			if(retentionEfficiency < 0.88)
-				// Overproofed: Loaf will deflate or flat-line during scoring cuts or when hitting steam in the oven
-				rheologicalPenalty += getTearingPenaltyMultiplier() * 140. * (0.88 - retentionEfficiency);
-			else if(finalVolume < effectiveUnderproofThreshold)
-				// Underproofed: Missing structural volume potential; dense core crumb expected
-				rheologicalPenalty += getUnderproofPenaltyCoefficient()
-					* (effectiveUnderproofThreshold - finalVolume);
+			double rheologicalPenalty = getRheologicalPenalty(finalVolume, maxPotential, referencePotential);
 
 			// NOTE: threshold lowered from 0.012 to 0.004. For bread fermented for 4-6 h the residual
 			// sugar is below 0.4 g/100 g flour unless the recipe contains added sucrose or honey.
@@ -238,6 +268,24 @@ public enum BakeryProduct{
 			final double stabilityPenalty = Math.abs(finalYeastDot) * 12.;
 
 			return rheologicalPenalty + sugarPenalty + offFlavorPenalty + stabilityPenalty;
+		}
+
+		private double getRheologicalPenalty(final double finalVolume, final double maxPotential,
+				final double referencePotential){
+			final double kTear = 1.5;
+			final double retentionEfficiency = 1. / (1. + Math.exp(kTear * (finalVolume - maxPotential)));
+
+			final double effectiveUnderproofThreshold = referencePotential * getUnderproofThresholdFactor();
+
+			double rheologicalPenalty = 0.;
+			if(retentionEfficiency < 0.88)
+				// Overproofed: Loaf will deflate or flat-line during scoring cuts or when hitting steam in the oven
+				rheologicalPenalty += getTearingPenaltyMultiplier() * 140. * (0.88 - retentionEfficiency);
+			else if(finalVolume < effectiveUnderproofThreshold)
+				// Underproofed: Missing structural volume potential; dense core crumb expected
+				rheologicalPenalty += getUnderproofPenaltyCoefficient()
+					* (effectiveUnderproofThreshold - finalVolume);
+			return rheologicalPenalty;
 		}
 
 		@Override
@@ -355,7 +403,7 @@ public enum BakeryProduct{
 	 */
 	public double requiredDevelopment(final double hydration){
 		final double hydrationMid = (recipeEnvelope.hydrationMin() + recipeEnvelope.hydrationMax()) / 2.;
-		return Math.min(0.95, Math.max(0.3, requiredDevelopment + HYDRATION_DEVELOPMENT_SLOPE * (hydration - hydrationMid)));
+		return Math.clamp(requiredDevelopment + HYDRATION_DEVELOPMENT_SLOPE * (hydration - hydrationMid), 0.3, 0.95);
 	}
 
 	/**
