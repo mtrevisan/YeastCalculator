@@ -74,7 +74,8 @@ public class GabMoistureModel{
 			final FlourInput flour = flourMatrix[i];
 			final FlourType type = flour.type();
 
-			wmDB[i] = type.getWmBase() + (0.085 * flour.protein()) + (0.12 * flour.fiber());
+			// fat-rich materials (hazelnut, chia) bind far less water per unit of protein and fiber than cereals do
+			wmDB[i] = type.getWmBase() + type.getCompositionFactor() * ((0.085 * flour.protein()) + (0.12 * flour.fiber()));
 			final double tmp = type.getkGab() * aw;
 			final double uEquilibriumDB = (wmDB[i] * type.getcGab() * tmp)
 				/ ((1. - tmp) * (1. + (type.getcGab() - 1.) * tmp));
