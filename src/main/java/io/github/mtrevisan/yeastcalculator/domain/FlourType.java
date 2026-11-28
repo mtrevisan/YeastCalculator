@@ -49,6 +49,66 @@ package io.github.mtrevisan.yeastcalculator.domain;
  */
 public enum FlourType{
 
+	/*
+	= LET(flourType; S12;
+flourProtein; S13; flourFiber; S14; flourAsh; S15;
+flourTemperature; S17; airRelativeHumidity; S18;
+damageType; S16;
+
+clamp; LAMBDA(x;lo;hi; IF(x < lo; lo; IF(x > hi; hi; x)));
+
+fidx; IFERROR(XMATCH(flourType; {"wheat","whole wheat","wheat semolina","wheat semolina fine","durum wheat","durum wheat semolina","durum wheat semolina fine","khorasan","whole khorasan","spelt","whole spelt","emmer","whole emmer","einkorn","whole einkorn","triticale","rye","whole rye","barley","whole barley","oat","whole oat","maize","maize fine","maize medium","maize coarse","maize white","maize red","rice","whole rice","millet","whole millet","foxtail millet","sorghum","buckwheat","whole buckwheat","quinoa","amaranth","teff","chickpea","lentil","pea","fava bean","soy","white bean","black bean","red lentil","green pea","lupin","chestnut","acorn","water chestnut","almond","coconut","hazelnut","walnut","pistachio","peanut","beech mast","flaxseed","hemp","pumpkin seed","sunflower seed","chia","sesame"}); 1);
+ff; IF(OR(flourType = "hazelnut"; flourType = "chia"); 0.4; 1);
+
+wm_base; CHOOSE(fidx; 0.062; 0.057; 0.06; 0.061; 0.063; 0.062; 0.062; 0.063; 0.056; 0.063; 0.055; 0.065; 0.057; 0.06; 0.058; 0.063; 0.067; 0.063; 0.064; 0.058; 0.055; 0.054; 0.058; 0.059; 0.058; 0.057; 0.058; 0.058; 0.065; 0.06; 0.058; 0.055; 0.058; 0.06; 0.055; 0.052; 0.062; 0.06; 0.049; 0.036; 0.035; 0.032; 0.03; 0.025; 0.033; 0.032; 0.035; 0.032; 0.022; 0.049; 0.054; 0.065; 0.01; 0.01; 0.005; 0.01; 0.01; 0.01; 0.01; 0.005; 0.005; 0.005; 0.005; 0.005; 0.007) + ff * (0.085 * flourProtein + 0.12 * flourFiber);
+C_GAB; CHOOSE(fidx; 11; 13.6; 10.5; 10.8; 12.5; 12; 12.2; 12; 12.5; 11; 11.5; 11.2; 11.7; 11.5; 12; 11; 13.5; 14; 10.5; 10.5; 10; 10; 9.5; 9.5; 9.5; 9.5; 9.5; 9.5; 12; 12; 9; 9; 9.5; 10; 9; 9.5; 10; 9; 10.4; 14; 13; 13; 13; 12; 13; 13; 13; 13; 12; 14; 14; 11; 7; 3.5; 7; 7; 7; 7; 7; 8; 8; 8; 8; 8; 4.5);
+K_GAB; CHOOSE(fidx; 0.89; 0.733; 0.9; 0.9; 0.88; 0.89; 0.89; 0.89; 0.88; 0.89; 0.89; 0.89; 0.88; 0.89; 0.86; 0.89; 0.87; 0.82; 0.88; 0.88; 0.9; 0.9; 0.89; 0.89; 0.89; 0.89; 0.89; 0.89; 0.88; 0.88; 0.9; 0.9; 0.9; 0.89; 0.91; 0.9; 0.89; 0.9; 0.7255; 0.88; 0.88; 0.87; 0.88; 0.87; 0.88; 0.88; 0.88; 0.87; 0.87; 0.92; 0.92; 0.9; 0.92; 0.92; 0.98; 0.92; 0.92; 0.92; 0.92; 0.91; 0.91; 0.91; 0.91; 0.97; 0.92);
+
+carbohydrates; MAX(0; 1 - flourProtein - flourFiber - flourAsh);
+starchAdj; SWITCH(damageType; "high"; 0.006; "low"; -0.003; "legume"; 0.004; 0) * carbohydrates;
+
+WmDB; wm_base + 0.085 * flourProtein + 0.12 * flourFiber + starchAdj;
+
+aw; clamp(airRelativeHumidity; 0.1; 0.95);
+tempFactor; EXP(-0.004 * (flourTemperature - 20));
+Wm_t; WmDB * tempFactor;
+
+tmp; K_GAB * aw;
+X_dry_raw; Wm_t * C_GAB * tmp / ((1 - tmp) * (1 + (C_GAB - 1) * tmp));
+X_dry; clamp(X_dry_raw; 0.05; 0.35);
+
+M_wet; X_dry / (1 + X_dry);
+dryMatter; 1 / (1 + X_dry);
+boundWater; dryMatter * Wm_t;
+activeWater; MAX(0; M_wet - boundWater);
+
+activeWater
+)
+
+type	maize
+protein	12.5%
+fiber	3.0%
+ashes	0.3%
+damage type	low
+flour temperature [°C]	18.0
+air relative humidity	59.0%
+flour humidity (wet basis)	6.7%
+
+1. Select "low" for:
+• Refined flours produced by industrial roller mills (e.g., "type 00" or "type 0" flours, or highly refined flours made from einkorn, spelt, or barley). The smooth steel rollers are designed to gently separate the bran, minimizing damage to the starch.
+• Soft-textured grains (e.g., einkorn, spelt, oats). Because their endosperm structure is naturally friable, these grains break down easily without subjecting the starch to intense mechanical stress.
+• Sifted flours intended for long fermentation processes, where excessive starch damage would be counterproductive (as it would lead to premature structural collapse due to the enzymatic activity of amylases).
+
+2. Select "high" for:
+• All stone-ground flours (whole-grain, "type 1," "type 2," or whole-grain flours made from rye, buckwheat, sorghum, or millet). Stone milling exerts significant pressure and friction, which generates heat and mechanically crushes—and ruptures—a very high percentage of starch granules.
+• Very hard grains (e.g., corn, sorghum, emmer). These require greater milling force to be reduced into flour, resulting in a higher degree of structural starch damage.
+• Whole-grain flours in general. The physical presence of bran fragments—which act like sharp edges during the milling process—promotes the mechanical rupture of the surrounding starch granules.
+
+3. Select "legume" for:
+• Fava bean flour (or any other flour derived from legumes, such as chickpea, lentil, or pea flour).
+• Chestnut flour or water chestnuts.
+
+	 */
 	// Literature notes (details and caveats: docs/sorption-isotherms-research.md). "No source found" means that no published
 	// sorption isotherm could be verified for that flour: the values are analogies with the closest verified flour.
 
